@@ -1,67 +1,87 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Underworld Staff Portal — House of Hades</title>
-  <style>
-    :root{
-      --bg:#0b0a10; --panel:#15121d; --panel-2:#1d1829;
-      --gold:#c8a85a; --gold-soft:#e7d7a6; --text:#e9e6f0;
-      --muted:#8a8398; --border:#2c2438; --danger:#b4546b;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0; min-height:100vh; font-family:Georgia,'Times New Roman',serif;
-      color:var(--text);
-      background:
-        radial-gradient(1200px 600px at 50% -10%, #241b33 0%, transparent 60%),
-        radial-gradient(800px 400px at 50% 110%, #2a1420 0%, transparent 55%),
-        var(--bg);
-      display:flex; align-items:center; justify-content:center; padding:1.5rem;
-    }
-    .card{
-      width:100%; max-width:360px; background:linear-gradient(180deg,var(--panel),var(--panel-2));
-      border:1px solid var(--border); border-radius:14px; padding:2.2rem 2rem;
-      box-shadow:0 20px 60px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.04);
-    }
-    .crest{text-align:center; font-size:2.1rem; margin-bottom:.3rem; color:var(--gold)}
-    h1{
-      font-size:1.15rem; letter-spacing:.14em; text-transform:uppercase;
-      text-align:center; margin:.1rem 0 .1rem; color:var(--gold-soft); font-weight:600;
-    }
-    .sub{text-align:center; color:var(--muted); font-size:.78rem; letter-spacing:.05em; margin-bottom:1.6rem}
-    label{display:block; font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:.35rem}
-    input{
-      width:100%; padding:.7rem .8rem; margin-bottom:1.1rem; background:#0f0c16;
-      border:1px solid var(--border); border-radius:8px; color:var(--text);
-      font-family:inherit; font-size:.95rem; outline:none; transition:border-color .15s,box-shadow .15s;
-    }
-    input:focus{border-color:var(--gold); box-shadow:0 0 0 3px rgba(200,168,90,.15)}
-    button{
-      width:100%; padding:.8rem; border:none; border-radius:8px; cursor:pointer;
-      background:linear-gradient(180deg,#c8a85a,#a8863f); color:#1a1410;
-      font-family:inherit; font-weight:700; letter-spacing:.08em; text-transform:uppercase; font-size:.85rem;
-      transition:filter .15s;
-    }
-    button:hover{filter:brightness(1.08)}
-    .foot{text-align:center; color:var(--muted); font-size:.68rem; margin-top:1.4rem; line-height:1.5}
-    .foot span{color:var(--gold)}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>House of Hades — Underworld Staff Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#0A0604; --raised:#160F09; --sunk:#0a0604;
+    --line:#3a2817; --line-soft:#271a0e;
+    --paper:#EEDFC6; --muted:#A78A63; --muted-dim:#6E5636;
+    --gold:#C98A34; --gold-bright:#E7C877; --gold-dim:#7D5A24;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; color:var(--paper);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    background:
+      radial-gradient(900px 540px at 50% -15%, rgba(201,138,52,.12), transparent 60%),
+      var(--void);
+    display:flex; align-items:center; justify-content:center; padding:1.5rem;
+  }
+  .card{
+    width:100%; max-width:370px;
+    background:linear-gradient(180deg,var(--raised),#100b07);
+    border:1px solid var(--line); border-radius:14px; padding:2.4rem 2.1rem 2rem;
+    box-shadow:0 24px 70px -30px rgba(0,0,0,.8), inset 0 1px 0 rgba(231,200,119,.05);
+  }
+  .crest{
+    width:54px; height:54px; margin:0 auto .9rem; border-radius:50%;
+    border:1.5px solid var(--gold-dim); display:flex; align-items:center; justify-content:center;
+    font-size:27px; color:var(--gold-bright);
+    background:radial-gradient(circle at 50% 35%, rgba(201,138,52,.18), transparent 70%);
+  }
+  h1{
+    font-family:"Cinzel",serif; font-weight:700; font-size:1.3rem; letter-spacing:.06em;
+    text-transform:uppercase; text-align:center; margin:0 0 .25rem; color:var(--gold-bright);
+  }
+  .sub{
+    text-align:center; font-family:"JetBrains Mono",monospace; font-size:.68rem;
+    letter-spacing:.22em; text-transform:uppercase; color:var(--muted-dim); margin:0 0 1.9rem;
+  }
+  label{
+    display:block; font-family:"JetBrains Mono",monospace; font-size:.66rem;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--muted); margin:0 0 .4rem;
+  }
+  input{
+    width:100%; padding:.72rem .8rem; margin-bottom:1.15rem; background:var(--sunk);
+    border:1px solid var(--line); border-radius:8px; color:var(--paper);
+    font-family:"JetBrains Mono",monospace; font-size:.92rem; outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  input:focus{border-color:var(--gold); box-shadow:0 0 0 3px rgba(201,138,52,.14)}
+  button{
+    width:100%; padding:.8rem; border:none; border-radius:8px; cursor:pointer; margin-top:.2rem;
+    background:linear-gradient(180deg,var(--gold-bright),var(--gold-dim)); color:#1a1006;
+    font-family:"Cinzel",serif; font-weight:700; letter-spacing:.1em; text-transform:uppercase; font-size:.85rem;
+    transition:filter .15s, transform .05s;
+  }
+  button:hover{filter:brightness(1.07)}
+  button:active{transform:translateY(1px)}
+  .foot{
+    text-align:center; font-family:"JetBrains Mono",monospace; font-size:.62rem;
+    letter-spacing:.1em; color:var(--muted-dim); margin-top:1.7rem; line-height:1.7;
+  }
+  .foot b{color:var(--gold)}
+</style>
 </head>
 <body>
   <main class="card">
     <div class="crest">&#9906;</div>
     <h1>House of Hades</h1>
     <p class="sub">Underworld Staff Portal</p>
-    <form action="/cgi-bin/login.py" method="POST">
+    <form action="/cgi-bin/login.py" method="POST" autocomplete="off">
       <label for="username">Keeper ID</label>
-      <input type="text" id="username" name="username" autocomplete="off" required>
+      <input type="text" id="username" name="username" required>
       <label for="password">Passphrase</label>
       <input type="password" id="password" name="password" required>
       <button type="submit">Descend</button>
     </form>
-    <p class="foot">Authorised wardens of Tartarus only.<br><span>&#10013;</span> By order of the Lord of the Dead</p>
+    <p class="foot">Authorised wardens of Tartarus only<br><b>&#10013;</b> by order of the Lord of the Dead</p>
   </main>
 </body>
 </html>
