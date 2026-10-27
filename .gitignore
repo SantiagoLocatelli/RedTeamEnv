@@ -1,0 +1,4 @@
+# Nada sensible en el repo
+*.log
+*.swp
+.DS_Store

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Login - Lab</title>
+  <style>
+    body { font-family: sans-serif; background: #1e1e2e; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    form { background: #2a2a3d; padding: 2rem; border-radius: 8px; width: 280px; color: #eee; }
+    input { width: 100%; padding: .6rem; margin: .5rem 0 1rem; border: none; border-radius: 4px; box-sizing: border-box; }
+    button { width: 100%; padding: .7rem; background: #7c6cf0; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <form action="/cgi-bin/login.py" method="POST">
+    <h2>Iniciar sesión</h2>
+    <label>Usuario</label>
+    <input type="text" name="username" required>
+    <label>Contraseña</label>
+    <input type="password" name="password" required>
+    <button type="submit">Entrar</button>
+  </form>
+</body>
+</html>
