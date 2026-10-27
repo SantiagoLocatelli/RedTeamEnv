@@ -35,7 +35,7 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 -tc \
   sudo -u postgres createdb -O "$APP_ROLE" "$DB_NAME"
 
 echo "[*] Loading schema and seed data..."
-sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f "$HERE/schema.sql"
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$HERE/schema.sql"
 
 echo "[*] Granting read access to '$APP_ROLE' (intentional over-privilege)..."
 sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_NAME" <<SQL
