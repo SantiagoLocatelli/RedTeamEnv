@@ -1,36 +1,46 @@
 # VictimWeb
 
-Página web de prueba para un laboratorio de ciberseguridad **aislado**,
-servida por Apache 2.4.49 compilado desde fuente en `/opt/apache-2.4.49`.
+Themed target web app for an **isolated** cybersecurity lab assessment
+(Greek mythology / "House of Hades"), served by Apache 2.4.49 compiled
+from source at `/opt/apache-2.4.49`.
 
-> ⚠️ Apache 2.4.49 es vulnerable (CVE-2021-41773 / CVE-2021-42013).
-> Usar solo en una VM en red host-only. No exponer a Internet.
+> WARNING: Apache 2.4.49 is vulnerable (CVE-2021-41773 / CVE-2021-42013).
+> Use only inside a host-only VM. Never expose it to the internet.
 
-## Estructura
+## Role in the assessment
 
-| Carpeta | Destino en la VM |
+- **Underworld Staff Portal** (`htdocs/login.html`) — the fake login used in
+  Phase 3 "False Messenger" to demonstrate credential-harvesting risk.
+- `cgi-bin/login.py` processes the POST and logs attempts to a local
+  `harvest.log` (git-ignored) for lab review.
+- A deliberately vulnerable database for the SQL-injection phase will be
+  added next.
+
+## Layout
+
+| Folder | Destination on the VM |
 |---|---|
 | `htdocs/` | `/opt/apache-2.4.49/htdocs/` |
 | `cgi-bin/` | `/opt/apache-2.4.49/cgi-bin/` |
 
-## Despliegue en la VM
+## Deploy on the VM
 
 ```bash
 cd ~
-git clone https://github.com/USUARIO/VictimWeb.git   # primera vez
+git clone https://github.com/USERNAME/VictimWeb.git   # first time
 cd VictimWeb
-# o para actualizar:  git pull
+# or to update:  git pull
 
 sudo ./deploy.sh
 ```
 
-## Credenciales de prueba
+## Demo credentials
 
-`admin` / `lab123` (hardcodeadas en `cgi-bin/login.py`, solo demo).
+`charon` / `ferryman` (themed demo, hardcoded in `cgi-bin/login.py`).
 
-## Probar
+## Test
 
 ```bash
 curl http://localhost/login.html
-curl -X POST -d "username=admin&password=lab123" http://localhost/cgi-bin/login.py
+curl -X POST -d "username=charon&password=ferryman" http://localhost/cgi-bin/login.py
 ```

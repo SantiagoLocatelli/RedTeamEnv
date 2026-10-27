@@ -1,4 +1,5 @@
-# Nada sensible en el repo
+# Nothing sensitive in the repo
 *.log
 *.swp
 .DS_Store
+harvest.log
