@@ -58,6 +58,7 @@ try:
     cur = conn.cursor()
     cur.execute(sql)
     rows = cur.fetchall()
+    print("DEBUG rows:", rows, file=sys.stderr)
     if rows:
         print('<h1>Access granted</h1>')
         print('<table><tr><th>Keeper</th><th>Email</th><th>Role</th></tr>')
