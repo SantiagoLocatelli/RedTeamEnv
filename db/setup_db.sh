@@ -15,7 +15,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 echo "[*] Installing PostgreSQL and psycopg2..."
 apt update
-apt install -y postgresql postgresql-contrib python3-psycopg2
+apt install -y postgresql postgresql-contrib python3-psycopg2 python3-ldap3
 
 echo "[*] Ensuring PostgreSQL is running..."
 systemctl enable --now postgresql
