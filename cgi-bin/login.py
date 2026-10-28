@@ -2,9 +2,12 @@
 # Underworld Staff Portal - login handler (ORIGINAL system)
 # ================================================================
 #  INTENTIONALLY VULNERABLE TO SQL INJECTION.  ISOLATED LAB ONLY.
-#  Authenticates against the wardens table with a concatenated
-#  query and prints raw DB errors, so BOTH UNION-based and
-#  error-based injection can extract every user's data.
+#  Realistic login: on success it only greets the user; on failure
+#  it shows a generic message. It does NOT dump any table.
+#  The database is misconfigured to print raw errors, so data is
+#  extracted via ERROR-BASED injection, e.g. in the Keeper ID field:
+#    ' AND 1=CAST((SELECT string_agg(username||':'||password_hash,', ')
+#      FROM wardens) AS int)--
 #  Do NOT deploy anywhere real.
 # ================================================================
 import os
@@ -35,20 +38,17 @@ print("""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <title>House of Hades - Gate</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=JetBrains+Mono&family=IBM+Plex+Sans&display=swap" rel="stylesheet">
 <style>
- body{margin:0;background:#0A0604;color:#EEDFC6;font-family:'IBM Plex Sans',sans-serif;padding:2.5rem 1.25rem}
- .wrap{max-width:720px;margin:0 auto}
- h1{font-family:'Cinzel',serif;color:#E7C877;letter-spacing:.04em;font-size:24px;margin:0 0 .6rem}
+ body{margin:0;background:#0A0604;color:#EEDFC6;font-family:'IBM Plex Sans',sans-serif;padding:3rem 1.25rem;text-align:center}
+ .wrap{max-width:520px;margin:0 auto}
+ h1{font-family:'Cinzel',serif;color:#E7C877;letter-spacing:.04em;font-size:26px;margin:0 0 .5rem}
+ p{color:#A78A63}
  a{color:#C98A34}
- table{width:100%;border-collapse:collapse;border:1px solid #3a2817;border-radius:10px;overflow:hidden;margin-top:1rem}
- th,td{text-align:left;padding:.6rem .8rem;border-bottom:1px solid #271a0e;font-size:.9rem}
- th{background:#160F09;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:#A78A63}
- td{font-family:'JetBrains Mono',monospace}
  .deny h1{color:#A78A63}
- .err{background:#1a0a06;border:1px solid #A8340F;border-radius:8px;padding:1rem;color:#E5442A;font-family:'JetBrains Mono',monospace;font-size:.85rem;white-space:pre-wrap;margin-top:1rem}
+ .err{text-align:left;background:#1a0a06;border:1px solid #A8340F;border-radius:8px;padding:1rem;color:#E5442A;font-family:'JetBrains Mono',monospace;font-size:.85rem;white-space:pre-wrap;margin-top:1rem}
 </style></head><body><div class="wrap">""")
 
 # VULNERABLE ON PURPOSE: both inputs concatenated straight into SQL,
-# no parameterisation. Enables UNION-based and error-based extraction.
+# no parameterisation. Verbose errors below enable error-based extraction.
 sql = ("SELECT username, email, role FROM wardens "
        "WHERE username = '" + username + "' "
        "AND password_hash = md5('" + password + "')")
@@ -57,17 +57,14 @@ try:
     conn = psycopg2.connect(**DB)
     cur = conn.cursor()
     cur.execute(sql)
-    rows = cur.fetchall()
-    print("DEBUG rows:", rows, file=sys.stderr)
-    if rows:
+    row = cur.fetchone()
+    if row:
+        # Realistic success: greet the authenticated keeper, nothing more.
         print('<h1>Access granted</h1>')
-        print('<table><tr><th>Keeper</th><th>Email</th><th>Role</th></tr>')
-        for r in rows:
-            cells = "".join("<td>%s</td>" % html.escape(str(c) if c is not None else "") for c in r)
-            print("<tr>%s</tr>" % cells)
-        print('</table>')
+        print('<p>Welcome back, keeper <b>%s</b>.</p>' % html.escape(str(row[0])))
     else:
-        print('<div class="deny"><h1>The ferryman turns you away.</h1>'
+        print('<div class="deny"><h1>Access denied</h1>'
+              '<p>The ferryman turns you away.</p>'
               '<p><a href="/login.html">Return to the gate</a></p></div>')
     cur.close()
     conn.close()

