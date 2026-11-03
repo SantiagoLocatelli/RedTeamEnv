@@ -3,3 +3,4 @@
 *.swp
 .DS_Store
 harvest.log
+harvested.log
