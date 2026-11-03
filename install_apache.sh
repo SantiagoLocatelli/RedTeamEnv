@@ -5,7 +5,7 @@
 set -e
 
 VERSION="2.4.49"
-PREFIX="/opt/apache-${VERSION}"
+PREFIX="${APACHE:-/opt/apache-${VERSION}}"
 SRC="https://archive.apache.org/dist/httpd/httpd-${VERSION}.tar.gz"
 BUILD_DIR="/tmp/apache-build"
 CONF="${PREFIX}/conf/httpd.conf"

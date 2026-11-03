@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Deploys the repo files into the Apache 2.4.49 lab install.
 # Usage (inside the VM):  sudo ./deploy.sh
+# Custom Apache path:     sudo APACHE=/path/to/apache ./deploy.sh
 set -e
 
-APACHE="/opt/apache-2.4.49"
+APACHE="${APACHE:-/opt/apache-2.4.49}"
 
 echo "[*] Copying htdocs..."
 cp htdocs/* "$APACHE/htdocs/"
