@@ -7,6 +7,20 @@ creates the warden accounts, joins a workstation, and points the portal at the D
 
 > ISOLATED LAB ONLY. Host-only network.
 
+## Automated setup
+
+`windows/setup-dc.ps1` scripts this whole guide and records every run to a
+transcript log. Edit the CONFIG block at the top, then, in an elevated PowerShell:
+
+```powershell
+.\setup-dc.ps1     # phase 1: network + AD DS + promotion (reboots)
+# after the reboot:
+.\setup-dc.ps1     # phase 2: creates the warden accounts
+```
+
+It is idempotent and self-detecting (skips existing users, knows which phase to
+run). The manual steps below are the same commands, for reference.
+
 ## 1. Prerequisites
 
 - A **Windows Server** VM (2019/2022) with a **static IP** (example: `192.168.1.10`).
