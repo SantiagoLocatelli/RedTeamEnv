@@ -187,31 +187,34 @@ nmap -p- -sV -sC -T4 10.1.1.X
 Port 80 is open and `Server: Apache/2.4.49` — a web server, and already an old,
 exploitable version.
 
-Brute-force content from the web root first:
+**Step 1 — brute-force the web root:**
 ```bash
 gobuster dir -u http://10.1.1.X -w /usr/share/wordlists/dirb/common.txt -x html,py
 ```
 This reveals `index.html`, `login.html`, and the `/cgi-bin/` directory (**403** —
 it exists but directory listing is off).
 
-**Finding the CGI scripts is the interesting part**, and a root scan does NOT
-reveal `admissions.py`. Why one script is found and the other is not:
-
-- `cgi-bin/login.py` is easy: `login.html`'s form links to it, so a link-aware
-  tool (e.g. `feroxbuster`, which extracts links) finds it straight from the HTML,
-  and "login" is in common wordlists anyway.
-- `cgi-bin/admissions.py` is **not linked anywhere**, and `/cgi-bin/` returns 403,
-  so recursive scanners do **not** descend into it. The only way to brute-force it
-  is to point the scanner **directly at `/cgi-bin/`** with a wordlist that contains
-  the word `admissions`:
-
+**Step 2 — brute-force INSIDE `/cgi-bin/` (this is the key step):**
+`gobuster` does **not** recurse into directories it finds, so the root scan stops
+at `/cgi-bin/` and never sees the scripts inside it. You must run gobuster again
+with `/cgi-bin/` as the base URL:
 ```bash
 gobuster dir -u http://10.1.1.X/cgi-bin/ -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x py
 ```
+This finds **`login.py`** and **`admissions.py`**.
 
-Lesson: an unlinked resource behind a 403 directory is hard to discover with
-automated tools — you must target the path explicitly, or get lucky with the
-wordlist. In a real engagement you would also crawl the site for links.
+Notes:
+- Use a wordlist that actually contains the word `admissions` — `common.txt` does
+  not, so use `directory-list-2.3-medium.txt` (or larger). Check first with:
+  `grep -i "^admissions$" <wordlist>`.
+- The `/cgi-bin/` directory returns 403 (not listable), but the individual scripts
+  under it return 200 and are found by name — the 403 does not hide them from a
+  direct, by-name scan.
+
+Lesson: always re-run gobuster against every directory you discover — it will not
+descend on its own. An unlinked script behind a 403 directory (like
+`admissions.py`) only surfaces from a direct `/cgi-bin/` scan with the right
+wordlist.
 
 ### 2. Detect the SQL injection
 
