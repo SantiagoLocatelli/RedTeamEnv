@@ -41,7 +41,7 @@ PAGE_HEAD = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
  input{flex:1;padding:.7rem .8rem;background:#080402;border:1px solid #3E2A16;border-radius:8px;color:#EEDFC6;font-family:'JetBrains Mono',monospace}
  input:focus{outline:none;border-color:#C98A34}
  button{padding:.7rem 1.3rem;border:none;border-radius:8px;background:linear-gradient(180deg,#FAC947,#7D5A24);color:#1a1006;font-family:'Cinzel',serif;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
- table{width:100%;border-collapse:collapse;border:1px solid #3E2A16;border-radius:10px;overflow:hidden}
+ table{width:100%%;border-collapse:collapse;border:1px solid #3E2A16;border-radius:10px;overflow:hidden}
  th,td{text-align:left;padding:.65rem .8rem;border-bottom:1px solid #28190D;font-size:.92rem}
  th{background:#150E09;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:#A78A63}
  td{font-family:'JetBrains Mono',monospace;color:#EEDFC6}
