@@ -36,8 +36,10 @@ only after a foothold on the gatehouse.
 
 ## Phase 1 — Watchful Gods (Reconnaissance)
 - **Goal:** map the attack surface of the exposed gatehouse.
-- **Technique:** `nmap -p- -sV` finds port 80 + `Apache/2.4.49`; `gobuster` finds
-  `/cgi-bin/admissions.py`.
+- **Technique:** `nmap -p- -sV` finds port 80 + `Apache/2.4.49`; `gobuster` on the
+  root finds `login.html` + the `/cgi-bin/` dir (403). `admissions.py` is unlinked
+  and behind the 403, so it is only found by scanning `/cgi-bin/` **directly** with
+  a wordlist containing "admissions" (recursive tools do not descend into a 403 dir).
 - **Yields:** the injectable endpoint *and* the outdated Apache version.
 - **Status:** target **[built]**.
 

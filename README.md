@@ -182,17 +182,36 @@ The work is **discovering** the app and the injectable parameter, then
 
 Find services and the web server:
 ```bash
-nmap -p- -sV -T4 10.1.1.X
+nmap -p- -sV -sC -T4 10.1.1.X
 ```
-You see port 80 open and `Server: Apache/2.4.49` — a web server, and already an
-old, exploitable version.
+Port 80 is open and `Server: Apache/2.4.49` — a web server, and already an old,
+exploitable version.
 
-You do **not** know `/cgi-bin/admissions.py` exists. Discover content:
+Brute-force content from the web root first:
 ```bash
-gobuster dir -u http://10.1.1.X -w /usr/share/wordlists/dirb/common.txt -x py,html
+gobuster dir -u http://10.1.1.X -w /usr/share/wordlists/dirb/common.txt -x html,py
 ```
-Also browse the site, read `robots.txt`, page source and `.js` files for endpoints.
-This reveals `/cgi-bin/` and the admissions page.
+This reveals `index.html`, `login.html`, and the `/cgi-bin/` directory (**403** —
+it exists but directory listing is off).
+
+**Finding the CGI scripts is the interesting part**, and a root scan does NOT
+reveal `admissions.py`. Why one script is found and the other is not:
+
+- `cgi-bin/login.py` is easy: `login.html`'s form links to it, so a link-aware
+  tool (e.g. `feroxbuster`, which extracts links) finds it straight from the HTML,
+  and "login" is in common wordlists anyway.
+- `cgi-bin/admissions.py` is **not linked anywhere**, and `/cgi-bin/` returns 403,
+  so recursive scanners do **not** descend into it. The only way to brute-force it
+  is to point the scanner **directly at `/cgi-bin/`** with a wordlist that contains
+  the word `admissions`:
+
+```bash
+gobuster dir -u http://10.1.1.X/cgi-bin/ -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x py
+```
+
+Lesson: an unlinked resource behind a 403 directory is hard to discover with
+automated tools — you must target the path explicitly, or get lucky with the
+wordlist. In a real engagement you would also crawl the site for links.
 
 ### 2. Detect the SQL injection
 
