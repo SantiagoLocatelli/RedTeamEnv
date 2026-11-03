@@ -123,6 +123,7 @@ db/               run on the VM to build the PostgreSQL database
   setup_db.sh
 docs/
   active-directory-setup.md     Windows Server DC + domain join + portal config
+install_apache.sh builds Apache 2.4.49 from source (with CGI enabled)
 deploy.sh         copies htdocs/ and cgi-bin/ into Apache and restarts
 ```
 
@@ -133,6 +134,7 @@ deploy.sh         copies htdocs/ and cgi-bin/ into Apache and restarts
 ```bash
 git clone git@github.com:USERNAME/VictimWeb.git ~/VictimWeb
 cd ~/VictimWeb
+sudo ./install_apache.sh  # build Apache 2.4.49 from source (only on a fresh machine)
 sudo ./deploy.sh          # web + CGI into Apache
 sudo ./db/setup_db.sh     # PostgreSQL + seed data + python3-ldap3 / psycopg2
 ```
@@ -140,8 +142,8 @@ sudo ./db/setup_db.sh     # PostgreSQL + seed data + python3-ldap3 / psycopg2
 Then set the AD settings in `cgi-bin/login.py` (`AD_HOST`, `AD_DOMAIN`) and follow
 `docs/active-directory-setup.md`.
 
-Requires `mod_cgid` loaded in `httpd.conf` so the `.py` CGI scripts execute instead
-of being downloaded. Apache serves `/opt/apache-2.4.49/cgi-bin/`, which is only
+`install_apache.sh` enables `mod_cgid` (so the `.py` CGI scripts execute instead of
+being downloaded). Apache serves `/opt/apache-2.4.49/cgi-bin/`, which is only
 refreshed by `deploy.sh` — a `git pull` alone does not update what Apache runs.
 
 Database summary:
