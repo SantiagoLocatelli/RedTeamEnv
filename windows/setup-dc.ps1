@@ -20,7 +20,7 @@ $DsrmPassword   = "DsrmP@ss-2026!"     # Directory Services Restore Mode passwor
 $UserPassword   = "Ferryman1!"         # warden account password (meets AD complexity)
 
 $ConfigureIP    = $true                # set to $false if the IP/DNS is already set
-$StaticIP       = "192.168.1.10"
+$StaticIP       = "192.168.1.100"
 $PrefixLength   = 24
 $Gateway        = "192.168.1.1"
 $InterfaceAlias = "Ethernet"           # check with: Get-NetIPConfiguration
