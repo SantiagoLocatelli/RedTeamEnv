@@ -14,7 +14,7 @@
 #>
 
 # ============================ CONFIG (edit me) ============================
-$DomainName     = "hades.local"        # AD domain (DNSRoot)
+$DomainName     = "hades.underworld"        # AD domain (DNSRoot)
 $NetBIOSName    = "HADES"              # short domain name
 $DsrmPassword   = "DsrmP@ss-2026!"     # Directory Services Restore Mode password
 $UserPassword   = "Ferryman1!"         # warden account password (meets AD complexity)
