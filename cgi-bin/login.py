@@ -16,7 +16,7 @@ import urllib.parse
 
 # ---- Active Directory settings (point these at your Windows DC) ----
 AD_HOST = "ldap://192.168.1.100"   # the Windows Server domain controller
-AD_DOMAIN = "elan.net"         # AD domain / UPN suffix
+AD_DOMAIN = "hades.underworld"         # AD domain / UPN suffix
 
 try:
     from ldap3 import Server, Connection, ALL
