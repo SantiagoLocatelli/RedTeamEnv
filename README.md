@@ -346,6 +346,21 @@ The Apache RCE lands you as the low-privileged Apache user (e.g. `daemon`), not 
 a real user — which is exactly why the phished credential is needed to become a
 real user with access, and only then escalate.
 
+### Post-foothold recon (from the gatehouse)
+
+Once you have the foothold, `nmap` is already on the box (installed by
+`install_apache.sh`). Map the internal LAN to find the DC, workstations and Splunk:
+
+```bash
+nmap -F -Pn 192.168.1.0/24
+```
+- `-F` — fast scan (top 100 ports) instead of all 1000.
+- `-Pn` — skip host discovery, treat every host as up. Windows hosts often drop
+  ICMP, so `-Pn` stops nmap from marking a live-but-silent host as down.
+
+It reports which hosts are up and which ports are open — the map for the lateral
+move to the domain-joined Windows workstation and for privilege escalation.
+
 ---
 
 ## Apache 2.4.49 (CVE-2021-41773 / 42013)

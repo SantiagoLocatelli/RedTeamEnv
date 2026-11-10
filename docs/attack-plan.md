@@ -75,9 +75,10 @@ only after a foothold on the gatehouse.
 
 ## Phase 6 — Keys of the Gods (Pivot + Escalation)
 - **Goal:** move into the internal network and become admin.
-- **Technique:** from the foothold (which can now reach `192.168.1.0/24`), use the
-  phished AD credential to log into the employee's domain-joined **Windows
-  workstation**, then escalate locally / in the domain.
+- **Technique:** from the foothold, map the internal LAN with `nmap -F -Pn
+  192.168.1.0/24` (nmap is on the gatehouse) to find the DC, workstations and
+  Splunk. Then use the phished AD credential to log into the employee's
+  domain-joined **Windows workstation**, and escalate locally / in the domain.
 - **Yields:** real user -> admin / domain.
 - **Status:** **[planned]** (depends on AD + workstations, in progress).
 
