@@ -38,4 +38,5 @@ INSERT INTO wardens (username, full_name, email, role, department) VALUES
  ('charon',   'Charon',   'charon@hades.underworld', 'Ferryman',      'Transit'),
  ('cerberus', 'Cerberus', 'warden@hades.underworld', 'Gatekeeper',    'Security'),
  ('minos',    'Minos',    'minos@hades.underworld',  'Judge',         'Judgement'),
+ ('persephone',    'Persephone',    'queen@hades.underworld',  'Queen',         'Garden'),
  ('hades',    'Hades',    'lord@hades.underworld',   'Administrator', 'Executive');
