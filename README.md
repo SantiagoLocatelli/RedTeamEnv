@@ -143,7 +143,8 @@ Then set the AD settings in `cgi-bin/login.py` (`AD_HOST`, `AD_DOMAIN`) and foll
 `docs/active-directory-setup.md`.
 
 `install_apache.sh` enables `mod_cgid` (so the `.py` CGI scripts execute instead of
-being downloaded). Apache serves `/opt/apache-2.4.49/cgi-bin/`, which is only
+being downloaded), sets `Require all granted` on `<Directory />` (so the CVE RCE is
+exploitable), and installs `nmap` on the box (for internal recon after the foothold). Apache serves `/opt/apache-2.4.49/cgi-bin/`, which is only
 refreshed by `deploy.sh` — a `git pull` alone does not update what Apache runs.
 
 Database summary:
@@ -361,6 +362,20 @@ In plain terms they let you do two things:
 1. **Read files you shouldn't** (path traversal) — e.g. read system files.
 2. **Run commands on the server** (RCE) — only when CGI (`mod_cgi`/`mod_cgid`) is
    enabled, which it is here for the login/admissions scripts.
+
+**Two conditions must hold for the RCE** (both are set up by `install_apache.sh`):
+- **CGI enabled** — `mod_cgid` is loaded (mod_cgi/prefork also works); confirmed
+  against Metasploit `multi/http/apache_normalize_path_rce`.
+- **`Require all granted` on `<Directory />`** — the default 2.4.49 config ships
+  `Require all denied`, which blocks the traversal to `/bin/sh` and makes the target
+  report *not vulnerable (requires mod_cgi)*. The exploit only works once the root
+  directory allows the traversal:
+  ```apache
+  <Directory />
+      AllowOverride none
+      Require all granted
+  </Directory>
+  ```
 
 Example checks (isolated lab only):
 ```bash

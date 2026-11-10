@@ -23,7 +23,7 @@ fi
 
 echo "[*] Installing build dependencies..."
 apt-get update
-apt-get install -y build-essential wget \
+apt-get install -y build-essential wget nmap \
   libapr1-dev libaprutil1-dev libpcre3-dev libpcre2-dev libssl-dev
 
 echo "[*] Downloading Apache ${VERSION} source..."
@@ -51,6 +51,12 @@ grep -q "^LoadModule cgid_module" "${CONF}" || \
 
 echo "[*] Setting ServerName (avoids the FQDN warning)..."
 grep -q "^ServerName " "${CONF}" || echo 'ServerName localhost:80' >> "${CONF}"
+
+echo "[*] Making the box exploitable (Require all granted on <Directory />)..."
+# CVE-2021-41773/42013 RCE traverses to /bin/sh (outside the docroot). The default
+# 'Require all denied' on the root directory blocks that, so the exploit reports the
+# target as not vulnerable. Relax it so the lab is actually exploitable.
+sed -i '/<Directory \/>/,/<\/Directory>/ s/Require all denied/Require all granted/' "${CONF}"
 
 echo "[*] Validating configuration..."
 "${PREFIX}/bin/apachectl" -t
