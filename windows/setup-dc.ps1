@@ -17,7 +17,7 @@
 $DomainName     = "hades.underworld"        # AD domain (DNSRoot)
 $NetBIOSName    = "HADES"              # short domain name
 $DsrmPassword   = "DsrmP@ss-2026!"     # Directory Services Restore Mode password
-$UserPassword   = "Ferryman1!"         # warden account password (meets AD complexity)
+$UserPassword   = "Ferryman1!"         # DEFAULT warden password (per-warden override via Pass=)
 
 $ConfigureIP    = $true                # set to $false if the IP/DNS is already set
 $StaticIP       = "192.168.1.100"
@@ -30,7 +30,7 @@ $Wardens = @(
   @{ Name = "Charon";   Sam = "charon";   Email = "charon@hades.underworld" },
   @{ Name = "Cerberus"; Sam = "cerberus"; Email = "warden@hades.underworld" },
   @{ Name = "Minos";    Sam = "minos";    Email = "minos@hades.underworld"  },
-  @{ Name = "Persephone";    Sam = "persephone";    Email = "persephone@hades.underworld"  },
+  @{ Name = "Persephone";    Sam = "persephone";    Email = "persephone@hades.underworld"; Pass = "Demeter01!" },
   @{ Name = "Hades";    Sam = "hades";    Email = "lord@hades.underworld"   }
 )
 # =========================================================================
@@ -71,12 +71,13 @@ if (-not $adReady) {
 else {
     $domain = (Get-ADDomain).DNSRoot
     Write-Host "[*] PHASE 2 - domain '$domain' is up. Creating warden accounts..." -ForegroundColor Cyan
-    $pw = ConvertTo-SecureString $UserPassword -AsPlainText -Force
-
     foreach ($w in $Wardens) {
+        $pwPlain = if ($w.Pass) { $w.Pass } else { $UserPassword }
+        $pw = ConvertTo-SecureString $pwPlain -AsPlainText -Force
         $exists = Get-ADUser -Filter "SamAccountName -eq '$($w.Sam)'" -ErrorAction SilentlyContinue
         if ($exists) {
-            Write-Host "    - $($w.Sam) already exists, skipping"
+            Set-ADAccountPassword -Identity $w.Sam -NewPassword $pw -Reset
+            Write-Host "    ~ $($w.Sam) already exists, password reset" -ForegroundColor Yellow
         } else {
             New-ADUser -Name $w.Name -SamAccountName $w.Sam `
                 -UserPrincipalName "$($w.Sam)@$domain" -EmailAddress $w.Email `

