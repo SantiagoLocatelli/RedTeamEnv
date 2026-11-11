@@ -30,7 +30,7 @@ $Wardens = @(
   @{ Name = "Charon";   Sam = "charon";   Email = "charon@hades.underworld" },
   @{ Name = "Cerberus"; Sam = "cerberus"; Email = "warden@hades.underworld" },
   @{ Name = "Minos";    Sam = "minos";    Email = "minos@hades.underworld"  },
-  @{ Name = "Persephone";    Sam = "persephone";    Email = "queen@hades.underworld"  },
+  @{ Name = "Persephone";    Sam = "persephone";    Email = "persephone@hades.underworld"  },
   @{ Name = "Hades";    Sam = "hades";    Email = "lord@hades.underworld"   }
 )
 # =========================================================================
