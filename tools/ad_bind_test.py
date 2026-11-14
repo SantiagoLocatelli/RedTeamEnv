@@ -5,7 +5,7 @@
 # Usage:
 #   python3 tools/ad_bind_test.py <DC_IP> <DNSRoot> <username> <password>
 # Example:
-#   python3 tools/ad_bind_test.py 192.168.1.10 elan.local charon 'Ferryman1!'
+#   python3 tools/ad_bind_test.py 192.168.1.100 hades.underworld charon 'Ferryman1!'
 import sys
 
 try:
@@ -16,7 +16,7 @@ except ImportError:
 
 if len(sys.argv) != 5:
     print("Usage: python3 tools/ad_bind_test.py <DC_IP> <DNSRoot> <username> <password>")
-    print("Example: python3 tools/ad_bind_test.py 192.168.1.10 elan.local charon 'Ferryman1!'")
+    print("Example: python3 tools/ad_bind_test.py 192.168.1.100 hades.underworld charon 'Ferryman1!'")
     sys.exit(1)
 
 dc, domain, user, password = sys.argv[1:5]

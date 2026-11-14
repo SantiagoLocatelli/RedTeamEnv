@@ -25,8 +25,8 @@ RECON -> SQLi (data) -> PHISHING (credential) -> APACHE CVE (access)
 [ External Kali ] 203.0.113.0/29 ──[ pfSense ]── [ Apache 10.1.1.0/28 ]  (DMZ, phases 1-5)
                                                          │
                                         [ Internal 192.168.1.0/24 ]  (phases 6+)
-                                        - Windows DC (Active Directory)
-                                        - Windows workstations (domain-joined)
+                                        - Windows DC 192.168.1.100 (hades.underworld)
+                                        - Windows workstation 192.168.1.103 (domain-joined)
                                         - Splunk 192.168.1.6
 ```
 Only the Apache gatehouse is reachable from outside. The internal zone is reached
@@ -75,12 +75,13 @@ only after a foothold on the gatehouse.
 
 ## Phase 6 — Keys of the Gods (Pivot + Escalation)
 - **Goal:** move into the internal network and become admin.
-- **Technique:** from the foothold, map the internal LAN with `nmap -F -Pn
-  192.168.1.0/24` (nmap is on the gatehouse) to find the DC, workstations and
-  Splunk. Then use the phished AD credential to log into the employee's
-  domain-joined **Windows workstation**, and escalate locally / in the domain.
+- **Technique:** from the foothold, map the internal LAN with a fast ping sweep
+  (`for i in $(seq 1 254); do ping -c1 -W1 192.168.1.$i | grep "bytes from"; done`)
+  to find the DC (.100), the workstation (.103) and Splunk (.6) — a full nmap `/24` sweep as an
+  unprivileged connect scan is too slow (~1h). ICMP can miss firewalled Windows
+  hosts, so fall back to a `/dev/tcp` sweep of 445/3389 if it comes back thin. Then **pivot with meterpreter `portfwd`** (forward .103:3389 to a local port on Kali—no SSH cred needed, it rides the existing C2) and RDP in as the phished `persephone`, then escalate locally / in the domain. Full runbook: `docs/phase6-pivot.md`.
 - **Yields:** real user -> admin / domain.
-- **Status:** **[planned]** (depends on AD + workstations, in progress).
+- **Status:** **[in progress]** (workstation .103 built + joined; pivot/escalation being run).
 
 ## Phase 7 — Stolen Relics (Exfiltration)
 - **Goal:** steal the target data (photos of rocks) protected by an acrostic cipher.
@@ -118,7 +119,6 @@ only after a foothold on the gatehouse.
 ## Current status
 
 - **Built:** recon target, SQL injection on admissions, the real AD-authenticated
-  portal, PostgreSQL directory, Windows DC setup guide (`docs/active-directory-setup.md`).
-- **In progress:** standing up the Windows Server domain controller.
-- **Next:** finish AD -> build the fake phishing clone (Phase 3) -> the pivot /
-  exfiltration chain.
+  portal, PostgreSQL directory, the Windows DC (`192.168.1.100`, `hades.underworld`), and the domain-joined workstation (`192.168.1.103`, RDP enabled, `persephone` authorised).
+- **In progress:** the Phase 6 pivot (`portfwd` → RDP as `persephone`) and local escalation on the workstation.
+- **Next:** finish the pivot/escalation → the exfiltration chain (Phases 7-9).

