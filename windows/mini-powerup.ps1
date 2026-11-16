@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-    Valida la condicion AlwaysInstallElevated.
-    Vulnerable solo si AMBAS claves (HKLM y HKCU) estan en 1.
+    Validates the AlwaysInstallElevated condition.
+    Vulnerable only if BOTH keys (HKLM and HKCU) are set to 1.
 #>
 
 function Test-AlwaysInstallElevated {
@@ -17,7 +17,7 @@ function Test-AlwaysInstallElevated {
                 -Name 'AlwaysInstallElevated' -ErrorAction Stop).AlwaysInstallElevated
         }
         catch {
-            $value = 0   # clave/valor ausente => tratado como deshabilitado
+            $value = 0   # missing key/value => treated as disabled
         }
         $results[$hive] = [int]$value
     }
@@ -25,19 +25,19 @@ function Test-AlwaysInstallElevated {
     $vulnerable = ($results['HKLM'] -eq 1) -and ($results['HKCU'] -eq 1)
 
     [PSCustomObject]@{
-        HKLM                = $results['HKLM']
-        HKCU                = $results['HKCU']
-        Vulnerable          = $vulnerable
+        HKLM                 = $results['HKLM']
+        HKCU                 = $results['HKCU']
+        Vulnerable           = $vulnerable
         AbuseFunctionPowerUp = if ($vulnerable) { 'Write-UserAddMSI' } else { $null }
     }
 }
 
-# Ejecutar
+# Run
 $r = Test-AlwaysInstallElevated
 $r | Format-List
 
 if ($r.Vulnerable) {
-    Write-Host "[!] VULNERABLE: AlwaysInstallElevated habilitado en ambos hives." -ForegroundColor Red
+    Write-Host "[!] VULNERABLE: AlwaysInstallElevated enabled on both hives." -ForegroundColor Red
 } else {
-    Write-Host "[+] No vulnerable (se requieren HKLM y HKCU = 1)." -ForegroundColor Green
+    Write-Host "[+] Not vulnerable (requires HKLM and HKCU = 1)." -ForegroundColor Green
 }
