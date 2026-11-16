@@ -144,20 +144,65 @@ cred, if 5985 is forwarded the same way with another `portfwd add -l 15985 -p 59
 
 ## Step 5 — Local privilege escalation on the workstation
 
-As `persephone` (normal user), enumerate then escalate:
+Privesc here follows **systematic local enumeration** — you don't guess one misconfig, you
+run the known privesc checklist (HackTricks / PEASS / OSCP) and act on what returns positive.
+The planted quick win on this box is **`AlwaysInstallElevated`** (set by
+`windows/setup-workstation.ps1` — see "How the misconfig is planted" below), so the box comes
+already vulnerable; the attacker's job is to *discover* it, not create it.
+
+**Why not winPEAS / PowerUp.** Both are AV-signatured — on a default Win10/11 with Defender
+active they are flagged and killed on load (and PowerUp also trips the PowerShell execution
+policy). Running PowerUp is itself a detection artifact (Defender 1116/1117, script-block 4104).
+So instead of the full signed toolkit we use a **minimal custom script that checks only this
+condition** and is not AV-flagged — `windows/mini-powerup.ps1`:
 
 ```powershell
-whoami /priv ; whoami /groups
-systeminfo
-# quick wins
+# rides the RDP drive redirect (\\tsclient\tools) or paste it in; it's already in the repo
+powershell -ep bypass -File .\mini-powerup.ps1
+```
+It reads both hives and reports `Vulnerable : True` when HKLM and HKCU are both `1`, plus the
+abuse function (`Write-UserAddMSI`). The **native equivalent** — no script engine, nothing for
+Defender to flag — is the same two reads:
+
+```cmd
 reg query HKLM\Software\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
 reg query HKCU\Software\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
 ```
-- Run **winPEAS** for unquoted service paths, writable service binaries, scheduled
-  tasks, stored creds.
-- If `SeImpersonatePrivilege` is present → PrintSpoofer / GodPotato.
-- Once local admin → dump cached creds (LSASS/mimikatz) and move toward **olympus-dc** (the target) with the
-  `hades` credential via PsExec/WinRM.
+Two `0x1` → vulnerable. For this check `reg query` is not a degraded version: it returns
+exactly what the script's `Get-ItemProperty` does.
+
+- `whoami /priv` / `whoami /groups` for the broader picture (`SeImpersonatePrivilege` →
+  PrintSpoofer / GodPotato as an alternative path).
+- Once local admin → dump cached creds (LSASS/mimikatz) and move toward **olympus-dc** (the
+  target) with the `hades` credential via PsExec/WinRM.
+
+### How the misconfig is planted (lab setup)
+
+`AlwaysInstallElevated` needs **both** hives = `1`: `HKLM` (machine-wide) and `HKCU` (per-user).
+`HKCU` is per-user, so it must land in **persephone's** hive. Two gotchas that bit us:
+
+- A **normal user cannot set it** — the `HKCU\Software\Policies` subtree is admin-write-only, so
+  `reg add` as persephone returns *access denied*. That's not a bug; it's the whole premise —
+  the flag can only arrive via an admin/misconfig, which is what makes it a valid finding.
+- Setting `HKCU` while logged in as **Administrator** writes the **admin's** hive, not
+  persephone's — so the privesc still fails. You must target persephone's hive by **SID**:
+
+```cmd
+:: as Administrator, with persephone logged in (so her hive is mounted under HKU\<SID>)
+wmic useraccount where name='persephone' get sid
+reg add "HKLM\Software\Policies\Microsoft\Windows\Installer" /v AlwaysInstallElevated /t REG_DWORD /d 1 /f
+reg add "HKU\<SID>\Software\Policies\Microsoft\Windows\Installer" /v AlwaysInstallElevated /t REG_DWORD /d 1 /f
+```
+If persephone is **logged off**, her hive isn't mounted — load it first:
+`reg load HKU\pph C:\Users\persephone\NTUSER.DAT` → `reg add ...` → `reg unload HKU\pph`.
+`setup-workstation.ps1` does all of this automatically (step 7), resolving the SID and
+loading/unloading the hive as needed.
+
+> **Tool-transfer note.** Kali in this lab has **no internet egress** (DNS to github.com /
+> 8.8.8.8 fails), so you can't pull tooling onto Kali on the fly — stage it beforehand, or for
+> anything needed internally, `meterpreter upload` it to the gatehouse and serve it over HTTP
+> to `192.168.1.0/24` (the workstation reaches the gatehouse's internal leg directly).
+> `mini-powerup.ps1` lives in the repo, so it just rides the `/drive` redirect — no download.
 
 ## Step 6 — Blue team / Splunk detection mapping
 
@@ -173,7 +218,7 @@ generates (Windows Security log → Splunk 192.168.1.6):
 | Failed RDP | 4625 Type 10 | Workstation .103 |
 | `portfwd` pivot (RDP) | meterpreter C2 session + gatehouse -> `192.168.1.103:3389` (Sysmon-for-Linux EID 3) | Gatehouse / pfSense |
 | Internal ping / TCP sweep | connection spikes, pfSense cross-zone logs | pfSense / Splunk |
-| winPEAS / mimikatz | 4688 proc creation; Sysmon EID 1; LSASS access Sysmon EID 10 | Workstation .103 |
+| privesc enum (mini-powerup.ps1) / mimikatz | 4688 proc creation; Sysmon EID 1; LSASS access Sysmon EID 10 | Workstation .103 |
 
 **Source IP of the 4624 Type 10** on .103 = the internal IP of the **gatehouse** (the
 hop exits the Ubuntu via `portfwd`), not Kali → a workstation receiving RDP from a DMZ

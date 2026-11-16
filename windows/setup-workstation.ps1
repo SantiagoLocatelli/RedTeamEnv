@@ -1,7 +1,8 @@
 <#
   setup-workstation.ps1 - configure the Blue Team workstation (persephone-ws) for the
   Phase 5-6 RDP pivot: enable RDP, start the service, open the firewall, DISABLE NLA,
-  and authorise the RDP user.
+  authorise the RDP user, and plant the AlwaysInstallElevated misconfiguration (the
+  Stage 6 local-privesc target).
 
   Run in an ELEVATED PowerShell on the workstation (VM console / noVNC), AFTER it is
   domain-joined to olympus.net and you have logged in once as the user so the profile
@@ -70,7 +71,37 @@ if ($prof) {
     }
 }
 
-# 7. Verify 3389 is listening
+# 7. Plant the AlwaysInstallElevated misconfiguration (Stage 6 privesc target)
+#    Vulnerable only when BOTH hives = 1: HKLM (machine-wide) + HKCU (per-user).
+#    HKCU is per-user, so it must land in persephone's hive -- NOT the admin hive this
+#    script runs under. A normal user cannot set it themselves (the Policies subtree is
+#    admin-write-only -> 'access denied'); that is exactly why it is a valid finding --
+#    it can only arrive via an admin/misconfig. We resolve persephone's SID and write
+#    into her hive (HKEY_USERS\<SID>), loading NTUSER.DAT if she is not currently logged in.
+#    (GPO User-config is the realistic alternative; here we plant it directly.)
+$key = 'Software\Policies\Microsoft\Windows\Installer'
+
+# HKLM -- single machine hive
+New-Item "HKLM:\$key" -Force | Out-Null
+Set-ItemProperty "HKLM:\$key" -Name AlwaysInstallElevated -Value 1 -Type DWord
+Ok "HKLM AlwaysInstallElevated = 1"
+
+# HKCU -- into persephone's hive, resolved by SID
+$acct = $RdpUser                                             # OLYMPUS\persephone
+$sid  = (New-Object System.Security.Principal.NTAccount($acct)).Translate(
+            [System.Security.Principal.SecurityIdentifier]).Value
+$uprofile = "C:\Users\$($acct.Split('\')[-1])"              # C:\Users\persephone
+$loaded = $false
+if (-not (Test-Path "Registry::HKEY_USERS\$sid")) {
+    reg load "HKU\$sid" "$uprofile\NTUSER.DAT" | Out-Null   # requires the user logged OFF
+    $loaded = $true
+}
+New-Item "Registry::HKEY_USERS\$sid\$key" -Force | Out-Null
+Set-ItemProperty "Registry::HKEY_USERS\$sid\$key" -Name AlwaysInstallElevated -Value 1 -Type DWord
+Ok "HKCU AlwaysInstallElevated = 1 (hive of $acct, SID $sid)"
+if ($loaded) { [gc]::Collect(); Start-Sleep -Milliseconds 500; reg unload "HKU\$sid" | Out-Null }
+
+# 8. Verify 3389 is listening
 Start-Sleep -Seconds 1
 if (Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue) {
     Ok "3389 is LISTENING - from the gatehouse test: bash -c 'echo > /dev/tcp/<ws-ip>/3389'"
@@ -81,3 +112,5 @@ if (Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyCont
 Write-Host ""
 Ok "Workstation ready. Connect from Kali through the portfwd:"
 Write-Host "    xfreerdp3 /u:persephone /d:olympus.net /p:'<password>' /v:127.0.0.1:13389 /cert:ignore +clipboard /sec:tls"
+Write-Host ""
+Info "Recon as persephone (custom, NOT AV-flagged like winPEAS/PowerUp): powershell -ep bypass -File .\mini-powerup.ps1"
