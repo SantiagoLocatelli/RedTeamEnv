@@ -93,6 +93,7 @@ only after a foothold on the gatehouse.
 - **Yields:** local admin / SYSTEM on the workstation.
 - **Status:** **[in progress]** (vector defined: AlwaysInstallElevated).
 
+
 ## Phase 7 — Stolen Relics (Exfiltration)
 - **Goal:** steal the target data (photos of rocks) protected by an acrostic cipher.
 - **Technique:** locate the files in the "Cretan Labyrinth" folder maze, decode the

