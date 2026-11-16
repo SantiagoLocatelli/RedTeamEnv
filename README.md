@@ -76,8 +76,8 @@ Network zones (reachability is enforced by the firewall):
    -----+-------------------------------
    |                                   |
 [ Apache server ]  10.1.1.0/28     [ Internal network ]  192.168.1.0/24
- "Outer Gatehouse"                   - Windows workstations (domain-joined)
- (reachable from outside)            - Windows Server DC (Active Directory)
+ "Outer Gatehouse"                   - persephone-ws (joined to olympus.net)
+ (reachable from outside)            - olympus-dc (target) + hades-dc (email server)
                                      - Splunk  192.168.1.6
                                      (NOT reachable from outside)
 ```
@@ -96,7 +96,7 @@ workstation, and point the portal at the directory.
 1. Recon            nmap + gobuster  ->  find the web app and Apache 2.4.49
 2. SQL injection    admissions page  ->  dump the staff directory (usernames, emails)
 3. Phishing         fake SSO portal  ->  harvest a real employee's AD credential
-4. Breach           Apache CVE (RCE) ->  foothold / pivot into the internal network
+4. Breach           Apache CVE (RCE) ->  foothold on the gatehouse (meterpreter)
 5. Lateral move     AD credential    ->  log into the employee's Windows workstation
 6. Escalate         local priv-esc   ->  admin / domain
 7. Loot / payload   exfiltration + the final staged payload
@@ -122,7 +122,7 @@ db/               run on the VM to build the PostgreSQL database
   schema.sql
   setup_db.sh
 docs/
-  active-directory-setup.md     Windows Server DC + domain join + portal config
+  active-directory-setup.md     olympus-dc (+ hades-dc note) + domain join + portal config
 install_apache.sh builds Apache 2.4.49 from source (with CGI enabled)
 deploy.sh         copies htdocs/ and cgi-bin/ into Apache and restarts
 ```

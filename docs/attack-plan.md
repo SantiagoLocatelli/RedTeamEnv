@@ -22,11 +22,12 @@ RECON -> SQLi (data) -> PHISHING (credential) -> APACHE CVE (access)
 ## Network zones
 
 ```
-[ External Kali ] 203.0.113.0/29 ──[ pfSense ]── [ Apache 10.1.1.0/28 ]  (DMZ, phases 1-5)
+[ External Kali ] 203.0.113.0/29 ──[ pfSense ]── [ Apache 10.1.1.0/28 ]  (DMZ, phases 1-4)
                                                          │
-                                        [ Internal 192.168.1.0/24 ]  (phases 6+)
-                                        - Windows DC 192.168.1.100 (hades.underworld)
-                                        - Windows workstation 192.168.1.103 (domain-joined)
+                                        [ Internal 192.168.1.0/24 ]  (phases 5+)
+                                        - olympus-dc (target DC, olympus.net)        e.g. .100
+                                        - hades-dc (email server, hades.underworld)
+                                        - persephone-ws (joined to olympus.net)      e.g. .103
                                         - Splunk 192.168.1.6
 ```
 Only the Apache gatehouse is reachable from outside. The internal zone is reached
@@ -61,27 +62,36 @@ only after a foothold on the gatehouse.
 - **Status:** the **real** portal is **[built]** (`login.html` + LDAP bind to AD);
   the **fake clone** is **[planned]**.
 
-## Phase 4 — Forgotten Gatehouse (Identify Apache)
-- **Goal:** confirm the outdated software and its vulnerability.
-- **Technique:** `curl -I` -> `Server: Apache/2.4.49` -> CVE-2021-41773 / 42013.
-- **Status:** target **[built]** (Apache 2.4.49 with `mod_cgid`).
-
-## Phase 5 — Breach of Hades (Exploit the CVE)
-- **Goal:** a foothold on the gatehouse.
-- **Technique:** path traversal -> RCE via CGI (`.%2e/` or double-encoding). Lands as
+## Phase 4 — Forgotten Gatehouse (Identify + Exploit the CVE)
+- **Goal:** confirm the outdated software, then exploit it for a foothold.
+- **Identify:** `curl -I` -> `Server: Apache/2.4.49` -> CVE-2021-41773 / 42013.
+- **Exploit:** path traversal -> RCE via CGI (`.%2e/` or double-encoding), run through the
+  Metasploit `apache_normalize_path_rce` module with a `meterpreter` payload. Lands as
   low-privileged `daemon`.
-- **Yields:** command execution = a foot inside the network.
-- **Status:** vulnerable target **[built]**; exploitation done in the lab.
+- **Yields:** a **meterpreter** foothold on the gatehouse (the C2 session the pivot rides).
+- **Status:** vulnerable target **[built]** (Apache 2.4.49 + `mod_cgid` + `Require all granted`);
+  exploitation done in the lab.
 
-## Phase 6 — Keys of the Gods (Pivot + Escalation)
-- **Goal:** move into the internal network and become admin.
+## Phase 5 — Breach of Hades (Pivot + RDP lateral)
+- **Goal:** move from the foothold into the internal network and get an interactive
+  session on persephone-ws.
 - **Technique:** from the foothold, map the internal LAN with a fast ping sweep
-  (`for i in $(seq 1 254); do ping -c1 -W1 192.168.1.$i | grep "bytes from"; done`)
-  to find the DC (.100), the workstation (.103) and Splunk (.6) — a full nmap `/24` sweep as an
-  unprivileged connect scan is too slow (~1h). ICMP can miss firewalled Windows
-  hosts, so fall back to a `/dev/tcp` sweep of 445/3389 if it comes back thin. Then **pivot with meterpreter `portfwd`** (forward .103:3389 to a local port on Kali—no SSH cred needed, it rides the existing C2) and RDP in as the phished `persephone`, then escalate locally / in the domain. Full runbook: `docs/phase6-pivot.md`.
-- **Yields:** real user -> admin / domain.
-- **Status:** **[in progress]** (workstation .103 built + joined; pivot/escalation being run).
+  (`for i in $(seq 1 254); do ping -c1 -W1 192.168.1.$i | grep "bytes from"; done`) to find
+  olympus-dc, persephone-ws and Splunk — a full nmap `/24` connect scan is too slow (~1h);
+  ICMP can miss firewalled Windows hosts, so fall back to a `/dev/tcp` sweep of 445/3389.
+  Then **pivot with meterpreter `portfwd`** (forward the ws 3389 to a local port on Kali —
+  no SSH cred needed, it rides the existing C2) and RDP in as the phished `persephone`
+  (NLA off + `/sec:tls`). Full runbook: `docs/phase5-6-pivot-escalation.md`.
+- **Yields:** an interactive RDP session on persephone-ws as a normal domain user.
+- **Status:** **[done in the lab]** (pivot + RDP lateral working).
+
+## Phase 6 — Keys of the Gods (Privilege escalation)
+- **Goal:** escalate on persephone-ws from a normal user to local admin / SYSTEM.
+- **Technique:** abuse **AlwaysInstallElevated** — a malicious MSI (msfvenom) runs as
+  SYSTEM via `msiexec` and adds a local admin; from local admin, dump creds and move
+  toward olympus-dc. Full runbook: Step 5 of `docs/phase5-6-pivot-escalation.md`.
+- **Yields:** local admin / SYSTEM on the workstation.
+- **Status:** **[in progress]** (vector defined: AlwaysInstallElevated).
 
 ## Phase 7 — Stolen Relics (Exfiltration)
 - **Goal:** steal the target data (photos of rocks) protected by an acrostic cipher.
@@ -103,8 +113,8 @@ only after a foothold on the gatehouse.
 
 ## Architecture decisions (why it is coherent)
 
-- **Authentication = Active Directory (SSO).** The portal does an LDAP bind to the
-  Windows DC; it stores no passwords, so the login is **not** SQL-injectable. This
+- **Authentication = Active Directory (SSO).** The portal does an LDAP bind to
+  olympus-dc; it stores no passwords, so the login is **not** SQL-injectable. This
   is standard for internal corporate apps and is why phishing the portal yields a
   network-wide credential.
 - **Application data = PostgreSQL.** Holds the directory and records; this is what
@@ -119,6 +129,6 @@ only after a foothold on the gatehouse.
 ## Current status
 
 - **Built:** recon target, SQL injection on admissions, the real AD-authenticated
-  portal, PostgreSQL directory, the Windows DC (`192.168.1.100`, `hades.underworld`), and the domain-joined workstation (`192.168.1.103`, RDP enabled, `persephone` authorised).
-- **In progress:** the Phase 6 pivot (`portfwd` → RDP as `persephone`) and local escalation on the workstation.
-- **Next:** finish the pivot/escalation → the exfiltration chain (Phases 7-9).
+  portal, PostgreSQL directory, **olympus-dc** (target, `olympus.net`) and **persephone-ws** (joined to `olympus.net`, RDP enabled, `persephone` authorised); **hades-dc** (`hades.underworld`, email server) is a separate box.
+- **In progress:** Phase 6 escalation (AlwaysInstallElevated) on persephone-ws; Phase 5 pivot + RDP lateral done.
+- **Next:** finish Phase 6 escalation → the exfiltration chain (Phases 7-9).

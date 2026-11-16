@@ -15,8 +15,8 @@ import html
 import urllib.parse
 
 # ---- Active Directory settings (point these at your Windows DC) ----
-AD_HOST = "ldap://192.168.1.100"   # the Windows Server domain controller
-AD_DOMAIN = "hades.underworld"         # AD domain / UPN suffix
+AD_HOST = "ldap://192.168.1.100"   # olympus-dc (Olympus target DC) — set to your environment's IP
+AD_DOMAIN = "olympus.net"              # AD domain / UPN suffix (users auth against Olympus; emails stay @hades.underworld)
 
 try:
     from ldap3 import Server, Connection, ALL

@@ -3,7 +3,7 @@
 > ISOLATED LAB ONLY. Authorised assessment — "assess defensive controls".
 
 Qué log / evento levanta cada técnica de la cadena, y dónde lo ve el Blue Team en
-**Splunk (192.168.1.6)**. Cadena cubierta (Fase 5-6):
+**Splunk (192.168.1.6)**. Cadena cubierta (Fases 4-6):
 RCE Apache → sesión meterpreter → pivot `portfwd` → RDP a .103 como `persephone` →
 privesc Windows → movimiento al DC.
 

@@ -14,8 +14,8 @@
 #>
 
 # ============================ CONFIG (edit me) ============================
-$DomainName     = "hades.underworld"        # AD domain (DNSRoot)
-$NetBIOSName    = "HADES"              # short domain name
+$DomainName     = "olympus.net"             # AD domain (DNSRoot) — Olympus target DC
+$NetBIOSName    = "OLYMPUS"            # short domain name
 $DsrmPassword   = "DsrmP@ss-2026!"     # Directory Services Restore Mode password
 $UserPassword   = "Ferryman1!"         # DEFAULT warden password (per-warden override via Pass=)
 

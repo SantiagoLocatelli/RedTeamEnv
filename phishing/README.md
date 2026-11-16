@@ -45,4 +45,4 @@ Captured attempts (valid and invalid) are appended to `harvested.log`
 ```
 
 Only `VALID` rows are confirmed working AD credentials — ready for the pivot
-(Phase 6: log into the victim's domain-joined workstation).
+(Phase 5: log into the victim's domain-joined workstation).
