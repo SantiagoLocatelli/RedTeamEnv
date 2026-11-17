@@ -24,7 +24,7 @@ fi
 echo "[*] Installing build dependencies..."
 apt-get update
 apt-get install -y build-essential wget nmap \
-  libapr1-dev libaprutil1-dev libpcre3-dev libpcre2-dev libssl-dev
+  libapr1-dev libaprutil1-dev libpcre3-dev libpcre2-dev libssl-dev net-tools
 
 echo "[*] Downloading Apache ${VERSION} source..."
 mkdir -p "${BUILD_DIR}"
