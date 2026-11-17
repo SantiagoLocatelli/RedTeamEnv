@@ -136,14 +136,18 @@ if ($Phase -eq 'B') {
     Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
     Ok "Firewall group 'Remote Desktop' enabled"
 
-    # 3b. allow inbound ICMPv4 echo (ping) - Defender drops it by default, so the
-    #     internal ping-sweep recon (Step 2) sees this host as DEAD without this rule.
-    Enable-NetFirewallRule -Name 'FPS-ICMP4-ERQ-In' -ErrorAction SilentlyContinue
-    if (-not (Get-NetFirewallRule -Name 'FPS-ICMP4-ERQ-In' -ErrorAction SilentlyContinue)) {
+    # 3b. allow inbound ICMPv4 echo (ping) on ALL profiles - Domain included.
+    #     This box is domain-joined => its active firewall profile on the internal
+    #     net is *Domain*. The built-in FPS-ICMP4-ERQ-In is often scoped to
+    #     Private/Public only, so just enabling it leaves the host DEAD to the
+    #     internal ping-sweep recon (Step 2). Force a rule that covers Domain too.
+    Get-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv4-In)' -ErrorAction SilentlyContinue |
+        Set-NetFirewallRule -Profile Any -Enabled True -ErrorAction SilentlyContinue
+    if (-not (Get-NetFirewallRule -Name 'Lab-ICMP4-In' -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule -Name 'Lab-ICMP4-In' -DisplayName 'Lab ICMPv4 Echo In' `
             -Protocol ICMPv4 -IcmpType 8 -Direction Inbound -Action Allow -Profile Any | Out-Null
     }
-    Ok "ICMPv4 echo (ping) allowed inbound"
+    Ok "ICMPv4 echo (ping) allowed inbound on all profiles (Domain included)"
 
     # 4. disable NLA (non-domain Kali connects with /sec:tls)
     Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 0
